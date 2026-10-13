@@ -1,0 +1,48 @@
+import SwiftUI
+import GX85Core
+
+struct SettingsView: View {
+    @ObservedObject var session: CameraSession
+    @ObservedObject var settings: CameraSettings
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("相机连接") {
+                    TextField("相机地址", text: $settings.host)
+                        .keyboardType(.numbersAndPunctuation).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .accessibilityLabel("相机 IPv4 地址")
+                    TextField("接收端口", text: $settings.portText).keyboardType(.numberPad).accessibilityLabel("监看接收端口")
+                    if session.isActive { Text("修改连接设置前，请先断开相机。").font(.footnote).foregroundStyle(.secondary) }
+                }.disabled(session.isActive)
+                Section {
+                    Button(session.isActive ? "断开相机" : "连接相机") {
+                        if session.isActive { session.disconnect() }
+                        else { session.connect(); dismiss() }
+                    }
+                    Text("请先在 iPhone 设置中加入 GX85 的 Wi-Fi，并在相机上允许连接。").font(.footnote).foregroundStyle(.secondary)
+                }
+                if let notice = session.notice { Section("最近拍照结果") { Text(notice) } }
+                if let error = session.lastError { Section("连接提示") { Text(error).foregroundStyle(.yellow) } }
+                Section {
+                    NavigationLink("连接诊断") { DiagnosticsView(session: session, log: session.diagnostics) }
+                    DisclosureGroup("高级连接设置") {
+                        TextField("相机连接标识（自动识别）", text: $settings.accessID)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled().disabled(session.isActive)
+                        Text("通常自动填写。如果相机拒绝连接，可按安装说明用 Windows 读取相机标识后填入。")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+                Section("关于") {
+                    Text("GX85 Monitor 0.1")
+                    Text("拍摄照片保存在相机存储卡。无线画面的清晰度与流畅度由相机输出和当前网络共同决定。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
+            }
+            .navigationTitle("设置").navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+        }
+        .preferredColorScheme(.dark)
+    }
+}

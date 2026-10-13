@@ -1,0 +1,12 @@
+.DS_Store
+**/.build/
+**/xcuserdata/
+DerivedData/
+build/
+dist/
+.tools/
+.superpowers/
+*.ipa
+*.xcresult
+*.zip
+__pycache__/

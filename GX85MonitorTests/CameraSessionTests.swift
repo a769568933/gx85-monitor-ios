@@ -1,0 +1,250 @@
+import Foundation
+import UIKit
+import XCTest
+import GX85Core
+@testable import GX85Monitor
+
+@MainActor
+final class CameraSessionTests: XCTestCase {
+    private func makeSession(_ commands: TestCommands, receiver: TestReceiver = TestReceiver()) -> CameraSession {
+        let defaults = UserDefaults(suiteName: UUID().uuidString)!
+        let settings = CameraSettings(defaults: defaults)
+        settings.accessID = "test-camera-uuid"
+        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { 0 }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) })
+    }
+
+    private func waitUntil(_ predicate: () -> Bool) async {
+        for _ in 0..<200 {
+            if predicate() { return }
+            try? await Task.sleep(nanoseconds: 5_000_000)
+        }
+        XCTFail("State transition did not arrive")
+    }
+
+    func testDisconnectIgnoresLateHandshake() async {
+        let commands = TestCommands()
+        await commands.holdAccess()
+        let session = makeSession(commands)
+        session.connect()
+        for _ in 0..<200 {
+            let waiting = await commands.accessWaiting
+            if waiting { break }
+            await Task.yield()
+        }
+        session.disconnect()
+        await commands.releaseAccess()
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(session.phase, .disconnected)
+        XCTAssertFalse(session.wantsConnection)
+        XCTAssertFalse(session.canCapture)
+    }
+
+    func testBackgroundStopsReceiverAndForegroundResumesOnlyWhenWanted() async {
+        let receiver = TestReceiver()
+        let session = makeSession(TestCommands(), receiver: receiver)
+        session.connect()
+        await waitUntil { session.canCapture }
+        session.setForeground(false)
+        XCTAssertGreaterThan(receiver.stops, 0)
+        XCTAssertFalse(session.canCapture)
+        session.disconnect()
+        session.setForeground(true)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(session.phase, .disconnected)
+        XCTAssertFalse(session.wantsConnection)
+    }
+
+    func testCaptureTimeoutSentOnceAndReportsUnknown() async {
+        let commands = TestCommands()
+        await commands.setCaptureError(CommandError.timedOut)
+        let session = makeSession(commands)
+        session.connect()
+        await waitUntil { session.canCapture }
+        session.capture()
+        await waitUntil { !session.isCapturing && session.notice != nil }
+        let count = await commands.captureCount
+        XCTAssertEqual(count, 1)
+        XCTAssertTrue(session.notice?.contains("结果未知") == true)
+        session.disconnect()
+    }
+
+    func testConcurrentCaptureIsDisabled() async {
+        let commands = TestCommands()
+        await commands.holdCapture()
+        let session = makeSession(commands)
+        session.connect()
+        await waitUntil { session.canCapture }
+        session.capture()
+        session.capture()
+        XCTAssertFalse(session.canCapture)
+        for _ in 0..<50 { await Task.yield() }
+        let count = await commands.captureCount
+        XCTAssertEqual(count, 1)
+        await commands.releaseCapture()
+        await waitUntil { !session.isCapturing }
+        session.disconnect()
+    }
+
+    func testRotationDoesNotRestartTransport() async {
+        let receiver = TestReceiver()
+        let session = makeSession(TestCommands(), receiver: receiver)
+        session.connect()
+        await waitUntil { session.canCapture }
+        // Both geometry branches consume the same model; querying layout has no transport effects.
+        for size in [CGSize(width: 390, height: 700), CGSize(width: 750, height: 350)] {
+            _ = PreviewLayout.fit(imageSize: CGSize(width: 640, height: 480), in: size)
+        }
+        XCTAssertEqual(receiver.starts, 1)
+        session.disconnect()
+    }
+
+    func testHealthFailureDuringCaptureDoesNotRecoverUntilCaptureSettles() async {
+        let time = ManualClock()
+        let commands = TestCommands()
+        let receiver = TestReceiver()
+        let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        settings.accessID = "camera-id"
+        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { seconds in try await time.sleep(seconds) })
+        session.connect()
+        await waitUntil { session.canCapture }
+        await waitUntil { time.pendingSleeps >= 2 }
+        await commands.failNextHealthChecks(2)
+        await time.advance(to: 2)
+        await waitForHealthCount(commands, atLeast: 2)
+        await waitUntil { time.pendingSleeps >= 2 }
+        await time.advance(to: 4)
+        await waitForHealthCount(commands, atLeast: 3)
+        await waitUntil { time.pendingSleeps >= 2 }
+        await commands.holdFailingHealth()
+        await time.advance(to: 6)
+        for _ in 0..<200 { let waiting = await commands.healthWaiting; if waiting { break }; await Task.yield() }
+        await commands.holdCapture()
+        session.capture()
+        await commands.releaseFailingHealth()
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertTrue(session.isCapturing)
+        XCTAssertEqual(receiver.starts, 1)
+        await commands.releaseCapture()
+        await waitUntil { !session.isCapturing }
+        session.disconnect()
+    }
+
+    func testStaleClockRunsWhileHealthRequestIsSuspended() async {
+        let time = ManualClock()
+        let commands = TestCommands()
+        let receiver = TestReceiver()
+        let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        settings.accessID = "camera-id"
+        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { seconds in try await time.sleep(seconds) })
+        session.connect()
+        await waitUntil { session.canCapture }
+        await waitUntil { time.pendingSleeps >= 2 }
+        let image = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2)).image { _ in UIColor.white.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: 2, height: 2)) }
+        receiver.emit(image.jpegData(compressionQuality: 0.8)!)
+        await waitUntil { session.image != nil }
+        await commands.holdFailingHealth()
+        await time.advance(to: 2)
+        for _ in 0..<200 { let waiting = await commands.healthWaiting; if waiting { break }; await Task.yield() }
+        await time.advance(to: 2.5)
+        await waitUntil { session.frameIsStale }
+        XCTAssertGreaterThanOrEqual(session.lastFrameAge ?? 0, 2)
+        session.disconnect()
+        await commands.releaseFailingHealth()
+    }
+
+    private func waitForHealthCount(_ commands: TestCommands, atLeast count: Int) async {
+        for _ in 0..<200 { let current = await commands.healthCount; if current >= count { return }; await Task.yield() }
+        XCTFail("Health request was not sent")
+    }
+}
+
+private actor TestCommands: CommandSending {
+    var captureCount = 0
+    var accessWaiting = false
+    var healthWaiting = false
+    var healthCount = 0
+    private var accessHeld = false
+    private var captureHeld = false
+    private var accessContinuation: CheckedContinuation<Void, Never>?
+    private var captureContinuation: CheckedContinuation<Void, Never>?
+    private var captureError: Error?
+    private var healthFailures = 0
+    private var holdHealth = false
+    private var healthContinuation: CheckedContinuation<Void, Never>?
+    func holdAccess() { accessHeld = true }
+    func holdCapture() { captureHeld = true }
+    func setCaptureError(_ error: Error) { captureError = error }
+    func releaseAccess() { accessHeld = false; accessContinuation?.resume(); accessContinuation = nil }
+    func releaseCapture() { captureHeld = false; captureContinuation?.resume(); captureContinuation = nil }
+    func failNextHealthChecks(_ count: Int) { healthFailures = count }
+    func holdFailingHealth() { holdHealth = true }
+    func releaseFailingHealth() { holdHealth = false; healthContinuation?.resume(); healthContinuation = nil }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        if command == .state {
+            healthCount += 1
+            if holdHealth {
+                healthWaiting = true
+                await withCheckedContinuation { healthContinuation = $0 }
+                throw CommandError.timedOut
+            }
+            if healthFailures > 0 { healthFailures -= 1; throw CommandError.timedOut }
+        }
+        if case .requestAccess = command, accessHeld {
+            accessWaiting = true
+            await withCheckedContinuation { accessContinuation = $0 }
+        }
+        if command == .capture {
+            captureCount += 1
+            if captureHeld { await withCheckedContinuation { captureContinuation = $0 } }
+            if let captureError { throw captureError }
+        }
+        return LumixResponse(status: .success, summary: "ok")
+    }
+}
+
+private final class TestReceiver: LiveViewReceiving {
+    var starts = 0
+    var stops = 0
+    private var callback: (@Sendable (Data) -> Void)?
+    func start(endpoint: CameraEndpoint, onDatagram: @escaping @Sendable (Data) -> Void) async throws { starts += 1; callback = onDatagram }
+    func stop() { stops += 1; callback = nil }
+    func emit(_ data: Data) { callback?(data) }
+}
+
+private final class ManualClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: TimeInterval = 0
+    private var waiters: [(UUID, TimeInterval, CheckedContinuation<Void, Error>)] = []
+    var now: TimeInterval { lock.lock(); defer { lock.unlock() }; return value }
+    var pendingSleeps: Int { lock.lock(); defer { lock.unlock() }; return waiters.count }
+    func sleep(_ seconds: TimeInterval) async throws {
+        let id = UUID()
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                lock.lock()
+                if Task.isCancelled { lock.unlock(); continuation.resume(throwing: CancellationError()); return }
+                waiters.append((id, value + seconds, continuation))
+                lock.unlock()
+            }
+        }, onCancel: {
+            self.lock.lock()
+            let index = self.waiters.firstIndex { $0.0 == id }
+            let waiter = index.map { self.waiters.remove(at: $0) }
+            self.lock.unlock()
+            waiter?.2.resume(throwing: CancellationError())
+        })
+    }
+    func advance(to time: TimeInterval) async {
+        let ready = advanceValue(to: time)
+        for waiter in ready { waiter.2.resume() }
+        for _ in 0..<20 { await Task.yield() }
+    }
+    private func advanceValue(to time: TimeInterval) -> [(UUID, TimeInterval, CheckedContinuation<Void, Error>)] {
+        lock.lock()
+        defer { lock.unlock() }
+        value = time
+        let ready = waiters.filter { $0.1 <= time }
+        waiters.removeAll { $0.1 <= time }
+        return ready
+    }
+}

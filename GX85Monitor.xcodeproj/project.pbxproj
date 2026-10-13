@@ -1,0 +1,472 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+		035C6E5A08AD8D1B17A29ADF = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/App/CameraSession.swift";
+			sourceTree = "<group>";
+		};
+		014CFE1EC91ABD1D1BC19DB9 = {
+			isa = "PBXBuildFile";
+			fileRef = 035C6E5A08AD8D1B17A29ADF;
+		};
+		72CEF7CF8540814B72C2778F = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/App/CameraSettings.swift";
+			sourceTree = "<group>";
+		};
+		1A47D4D7DD0A053F5B7538B0 = {
+			isa = "PBXBuildFile";
+			fileRef = 72CEF7CF8540814B72C2778F;
+		};
+		ECDB0C50A5AF125459948D5C = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/App/DiagnosticsLog.swift";
+			sourceTree = "<group>";
+		};
+		05FD725CC6916154F29A8044 = {
+			isa = "PBXBuildFile";
+			fileRef = ECDB0C50A5AF125459948D5C;
+		};
+		61DC15DF936FDFFB421F984E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/App/GX85MonitorApp.swift";
+			sourceTree = "<group>";
+		};
+		629C177A6CEA9D2EB456E0BA = {
+			isa = "PBXBuildFile";
+			fileRef = 61DC15DF936FDFFB421F984E;
+		};
+		A6134C6332BEC8DA9CB2C4DA = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/CameraIdentityResolver.swift";
+			sourceTree = "<group>";
+		};
+		A8C3CAE52B183737235274A1 = {
+			isa = "PBXBuildFile";
+			fileRef = A6134C6332BEC8DA9CB2C4DA;
+		};
+		29C932A3C5DC15E38DE3A135 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/LatestFrameDecoder.swift";
+			sourceTree = "<group>";
+		};
+		764F717AD1F99A914E166B10 = {
+			isa = "PBXBuildFile";
+			fileRef = 29C932A3C5DC15E38DE3A135;
+		};
+		921A85E3554B516F0402E5AC = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/LiveViewReceiver.swift";
+			sourceTree = "<group>";
+		};
+		88F4D28557744E65589E39B1 = {
+			isa = "PBXBuildFile";
+			fileRef = 921A85E3554B516F0402E5AC;
+		};
+		06094EF78102773740A2E86D = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/LumixCommandClient.swift";
+			sourceTree = "<group>";
+		};
+		83D74A8131A5BB93970318DB = {
+			isa = "PBXBuildFile";
+			fileRef = 06094EF78102773740A2E86D;
+		};
+		09D539B42359ED2BF3BB6DB2 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/CameraView.swift";
+			sourceTree = "<group>";
+		};
+		A738E05D492448C83456E9CC = {
+			isa = "PBXBuildFile";
+			fileRef = 09D539B42359ED2BF3BB6DB2;
+		};
+		D9CB6E0131EB75810E7B3CD4 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/ConnectionGuideView.swift";
+			sourceTree = "<group>";
+		};
+		8F674E4E630B4BF2F04DF4E4 = {
+			isa = "PBXBuildFile";
+			fileRef = D9CB6E0131EB75810E7B3CD4;
+		};
+		9B53DB1260148266EB408D5D = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/DiagnosticsView.swift";
+			sourceTree = "<group>";
+		};
+		6F47FFA58F45952A6487DB21 = {
+			isa = "PBXBuildFile";
+			fileRef = 9B53DB1260148266EB408D5D;
+		};
+		5629D32248BCEE5DA4202F43 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/PreviewLayout.swift";
+			sourceTree = "<group>";
+		};
+		7E3C003F2405E376C92FA338 = {
+			isa = "PBXBuildFile";
+			fileRef = 5629D32248BCEE5DA4202F43;
+		};
+		D260DE2D63E403E61F85BA04 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/SettingsView.swift";
+			sourceTree = "<group>";
+		};
+		A5C269985C0BC4DF8B9EAE27 = {
+			isa = "PBXBuildFile";
+			fileRef = D260DE2D63E403E61F85BA04;
+		};
+		80927C68FA0B7F2AE37F40BC = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/ShutterButton.swift";
+			sourceTree = "<group>";
+		};
+		B01446DF14845EE9CB256589 = {
+			isa = "PBXBuildFile";
+			fileRef = 80927C68FA0B7F2AE37F40BC;
+		};
+		CF8D0BD4B75E8C2C174692A5 = {
+			isa = "PBXGroup";
+			children = (035C6E5A08AD8D1B17A29ADF, 72CEF7CF8540814B72C2778F, ECDB0C50A5AF125459948D5C, 61DC15DF936FDFFB421F984E, A6134C6332BEC8DA9CB2C4DA, 29C932A3C5DC15E38DE3A135, 921A85E3554B516F0402E5AC, 06094EF78102773740A2E86D, 09D539B42359ED2BF3BB6DB2, D9CB6E0131EB75810E7B3CD4, 9B53DB1260148266EB408D5D, 5629D32248BCEE5DA4202F43, D260DE2D63E403E61F85BA04, 80927C68FA0B7F2AE37F40BC, 8119A4784A182D847E337D77, 13A03CFFEE26A9B9A367DAD9,);
+			name = "GX85Monitor";
+			sourceTree = "<group>";
+		};
+		40E6E239EAB1561138FF8532 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraSessionTests.swift";
+			sourceTree = "<group>";
+		};
+		A0DE1017FE51E3D6F09D8F8A = {
+			isa = "PBXBuildFile";
+			fileRef = 40E6E239EAB1561138FF8532;
+		};
+		3DD6FE38F99A827C540B29B8 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CommandClientTests.swift";
+			sourceTree = "<group>";
+		};
+		516E1FC6000A644269BD1185 = {
+			isa = "PBXBuildFile";
+			fileRef = 3DD6FE38F99A827C540B29B8;
+		};
+		980E0340A5E3504C560C26AB = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/PreviewLayoutTests.swift";
+			sourceTree = "<group>";
+		};
+		8C8CE8E8529019258333363A = {
+			isa = "PBXBuildFile";
+			fileRef = 980E0340A5E3504C560C26AB;
+		};
+		EEFE21A1443933CA4DE017DA = {
+			isa = "PBXGroup";
+			children = (40E6E239EAB1561138FF8532, 3DD6FE38F99A827C540B29B8, 980E0340A5E3504C560C26AB,);
+			name = "GX85MonitorTests";
+			sourceTree = "<group>";
+		};
+		8119A4784A182D847E337D77 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "folder.assetcatalog";
+			path = "GX85Monitor/Assets.xcassets";
+			sourceTree = "<group>";
+		};
+		13A03CFFEE26A9B9A367DAD9 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "text.plist.xml";
+			path = "GX85Monitor/Info.plist";
+			sourceTree = "<group>";
+		};
+		FB90684E69A6C96ED866993E = {
+			isa = "PBXBuildFile";
+			fileRef = 8119A4784A182D847E337D77;
+		};
+		B6CDB6E5D160E013280D3C68 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.application";
+			includeInIndex = 0;
+			path = "GX85Monitor.app";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		E02A90D9643568EA39115CFB = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.cfbundle";
+			includeInIndex = 0;
+			path = "GX85MonitorTests.xctest";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
+		00C45FD35CB0F9C5F764F070 = {
+			isa = "PBXGroup";
+			children = (B6CDB6E5D160E013280D3C68, E02A90D9643568EA39115CFB,);
+			name = "Products";
+			sourceTree = "<group>";
+		};
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = "PBXGroup";
+			children = (CF8D0BD4B75E8C2C174692A5, EEFE21A1443933CA4DE017DA, 00C45FD35CB0F9C5F764F070,);
+			sourceTree = "<group>";
+		};
+		E1823BFFAEB4E505466451C6 = {
+			isa = "XCLocalSwiftPackageReference";
+			relativePath = "GX85Core";
+		};
+		824B735A2A3B6BFCA42B169A = {
+			isa = "XCSwiftPackageProductDependency";
+			package = E1823BFFAEB4E505466451C6;
+			productName = "GX85Core";
+		};
+		EFDAD44D0FC98870482F4267 = {
+			isa = "PBXBuildFile";
+			productRef = 824B735A2A3B6BFCA42B169A;
+		};
+		5B9773D84493B3D713DB9AC0 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = (EFDAD44D0FC98870482F4267,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B681E6ECC54B86FE775FEC3C = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (FB90684E69A6C96ED866993E,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3BE5C704148406E58FE0AB5F = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (014CFE1EC91ABD1D1BC19DB9, 1A47D4D7DD0A053F5B7538B0, 05FD725CC6916154F29A8044, 629C177A6CEA9D2EB456E0BA, A8C3CAE52B183737235274A1, 764F717AD1F99A914E166B10, 88F4D28557744E65589E39B1, 83D74A8131A5BB93970318DB, A738E05D492448C83456E9CC, 8F674E4E630B4BF2F04DF4E4, 6F47FFA58F45952A6487DB21, 7E3C003F2405E376C92FA338, A5C269985C0BC4DF8B9EAE27, B01446DF14845EE9CB256589,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		112EFB9CA2188A3E624E2389 = {
+			isa = "XCSwiftPackageProductDependency";
+			package = E1823BFFAEB4E505466451C6;
+			productName = "GX85Core";
+		};
+		04CD886DD8BBD2CA658E2DD6 = {
+			isa = "PBXBuildFile";
+			productRef = 112EFB9CA2188A3E624E2389;
+		};
+		E51E325E2D7A6ADDC5C9CAB4 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = (04CD886DD8BBD2CA658E2DD6,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		327C4876CA8224A30B067B0B = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1A2AAFC871EB5C3BDDDDE160 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (A0DE1017FE51E3D6F09D8F8A, 516E1FC6000A644269BD1185, 8C8CE8E8529019258333363A,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D36D33020B6BB89396BD1B34 = {
+			isa = "PBXContainerItemProxy";
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 29C7B681C8D62CBAC94D51C0;
+			remoteInfo = "GX85Monitor";
+		};
+		D2F9C6ACC3CFD758A2AF1D96 = {
+			isa = "PBXTargetDependency";
+			target = 29C7B681C8D62CBAC94D51C0;
+			targetProxy = D36D33020B6BB89396BD1B34;
+		};
+		877A6BA951A2EA0025A2ABE8 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				IPHONEOS_DEPLOYMENT_TARGET = "16.0";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				DEBUG_INFORMATION_FORMAT = "dwarf";
+				ENABLE_TESTABILITY = "YES";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG";
+				ONLY_ACTIVE_ARCH = "YES";
+			};
+			name = "Debug";
+		};
+		959134B361DD7E21ADEA3164 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				CLANG_ENABLE_MODULES = "YES";
+				CLANG_ENABLE_OBJC_ARC = "YES";
+				IPHONEOS_DEPLOYMENT_TARGET = "16.0";
+				SDKROOT = "iphoneos";
+				SWIFT_VERSION = "5.0";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+			};
+			name = "Release";
+		};
+		247BF104A9AD002C539DA531 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (877A6BA951A2EA0025A2ABE8, 959134B361DD7E21ADEA3164,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		3CF6A4F2E05B3AAE7E2CBFEE = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gx85monitor.app";
+				TARGETED_DEVICE_FAMILY = "1";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				CODE_SIGN_STYLE = "Automatic";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				GENERATE_INFOPLIST_FILE = "NO";
+				INFOPLIST_FILE = "GX85Monitor/Info.plist";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
+				CURRENT_PROJECT_VERSION = "1";
+				MARKETING_VERSION = "0.1.0";
+			};
+			name = "Debug";
+		};
+		23FB2CAEB38545C3793097DD = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gx85monitor.app";
+				TARGETED_DEVICE_FAMILY = "1";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				CODE_SIGN_STYLE = "Automatic";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				GENERATE_INFOPLIST_FILE = "NO";
+				INFOPLIST_FILE = "GX85Monitor/Info.plist";
+				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
+				CURRENT_PROJECT_VERSION = "1";
+				MARKETING_VERSION = "0.1.0";
+			};
+			name = "Release";
+		};
+		9EA62D25DFD1EFBA21F6DE7B = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (3CF6A4F2E05B3AAE7E2CBFEE, 23FB2CAEB38545C3793097DD,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		E2657B9FA91DD4A55652006F = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gx85monitor.tests";
+				TARGETED_DEVICE_FAMILY = "1";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				CODE_SIGN_STYLE = "Automatic";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks",);
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GX85Monitor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GX85Monitor";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+			};
+			name = "Debug";
+		};
+		B4343C19535B18410503AED7 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gx85monitor.tests";
+				TARGETED_DEVICE_FAMILY = "1";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				CODE_SIGN_STYLE = "Automatic";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@loader_path/Frameworks",);
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/GX85Monitor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GX85Monitor";
+				BUNDLE_LOADER = "$(TEST_HOST)";
+			};
+			name = "Release";
+		};
+		0AD37307DFDAE852A779B369 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (E2657B9FA91DD4A55652006F, B4343C19535B18410503AED7,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
+		29C7B681C8D62CBAC94D51C0 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = 9EA62D25DFD1EFBA21F6DE7B;
+			buildPhases = (3BE5C704148406E58FE0AB5F, 5B9773D84493B3D713DB9AC0, B681E6ECC54B86FE775FEC3C,);
+			buildRules = ();
+			dependencies = ();
+			name = "GX85Monitor";
+			packageProductDependencies = (824B735A2A3B6BFCA42B169A,);
+			productName = "GX85Monitor";
+			productReference = B6CDB6E5D160E013280D3C68;
+			productType = "com.apple.product-type.application";
+		};
+		7EC8F98B7A265120217712DE = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = 0AD37307DFDAE852A779B369;
+			buildPhases = (1A2AAFC871EB5C3BDDDDE160, E51E325E2D7A6ADDC5C9CAB4, 327C4876CA8224A30B067B0B,);
+			buildRules = ();
+			dependencies = (D2F9C6ACC3CFD758A2AF1D96,);
+			name = "GX85MonitorTests";
+			packageProductDependencies = (112EFB9CA2188A3E624E2389,);
+			productName = "GX85MonitorTests";
+			productReference = E02A90D9643568EA39115CFB;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		98F54143AB4E86B28C3AFEE0 = {
+			isa = "PBXProject";
+			attributes = {
+				BuildIndependentTargetsInParallel = "YES";
+				LastSwiftUpdateCheck = "1600";
+				LastUpgradeCheck = "1600";
+				TargetAttributes = {
+					29C7B681C8D62CBAC94D51C0 = {
+						CreatedOnToolsVersion = "16.0";
+					};
+					7EC8F98B7A265120217712DE = {
+						CreatedOnToolsVersion = "16.0";
+						TestTargetID = 29C7B681C8D62CBAC94D51C0;
+					};
+				};
+			};
+			buildConfigurationList = 247BF104A9AD002C539DA531;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = "zh_CN";
+			hasScannedForEncodings = 0;
+			knownRegions = ("zh_CN", "en", "Base",);
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			packageReferences = (E1823BFFAEB4E505466451C6,);
+			productRefGroup = 00C45FD35CB0F9C5F764F070;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (29C7B681C8D62CBAC94D51C0, 7EC8F98B7A265120217712DE,);
+		};
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0;
+}

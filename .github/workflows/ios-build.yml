@@ -1,0 +1,58 @@
+name: Build GX85 iPhone App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gx85-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Report Apple toolchain
+        run: xcodebuild -version
+      - name: Test protocol and frame core
+        run: swift test --package-path GX85Core
+      - name: Select available iPhone simulator
+        run: python3 scripts/select-simulator.py
+      - name: Test iPhone app
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p dist
+          xcodebuild test \
+            -project GX85Monitor.xcodeproj \
+            -scheme GX85Monitor \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -resultBundlePath dist/iPhoneTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee dist/simulator-tests.log
+      - name: Build unsigned device IPA
+        run: bash scripts/build-ipa.sh
+      - name: Save install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: GX85Monitor-unsigned-IPA
+          path: dist/GX85Monitor-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+      - name: Save validation logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GX85Monitor-validation
+          path: |
+            dist/*.log
+            dist/*.xcresult
+          if-no-files-found: ignore
+          retention-days: 14
