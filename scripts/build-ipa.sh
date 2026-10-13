@@ -22,7 +22,7 @@ if [[ ! -d "$GX_APP" || ! -x "$GX_APP/GX85Monitor" ]]; then
 fi
 GX_PLATFORM=$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$GX_APP/Info.plist")
 [[ "$GX_PLATFORM" == 'iphoneos' ]] || { echo 'Refusing to package a simulator app.' >&2; exit 1; }
-lipo -verify_arch arm64 "$GX_APP/GX85Monitor"
+lipo "$GX_APP/GX85Monitor" -verify_arch arm64
 mkdir -p "$GX_WORK/Payload"
 ditto "$GX_APP" "$GX_WORK/Payload/GX85Monitor.app"
 GX_IPA="$GX_ROOT/dist/GX85Monitor-unsigned.ipa"
