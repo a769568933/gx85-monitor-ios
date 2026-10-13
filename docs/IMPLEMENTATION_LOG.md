@@ -50,3 +50,9 @@ GitHub upload attempt: user supplied a769568933/gx85-monitor-ios. Repository met
 GitHub upload succeeded: 67 files committed on main at 5630e112b0148b4c293afecc8a850d2790477f1a. Private repository and workflow file verified. Cloud run 38387882048 started on push; watching validation.
 
 Cloud run 38387882048: 24 core + 15 iOS tests passed, iOS device Release BUILD SUCCEEDED. Packaging failed in lipo because -verify_arch consumes following architecture arguments, including the mistakenly trailing binary path. Moved input binary before -verify_arch arm64; next cloud run is acceptance verification. Added workflow path filters so documentation-only status updates do not repeat a validated build.
+
+Cloud run 38388698038: SUCCESS. Exact corrected revision e82a31037ec233761990ffaf081bdb705161f0b1 passed 24 core tests + 15 iOS tests, device Release build, ARM64 validation, IPA packaging and upload. The packaging failure was observed in run 1 and no longer occurs in run 2.
+Downloaded IPA artifact 11808055340. Artifact ZIP digest matched GitHub; local ZIP/plist/Mach-O verification passed. IPA is unsigned, arm64, minimum iOS 16.0, 288288 bytes, SHA256 1e5b70823b320eb6d64483fdd15c2d1d64160757f02bcb05df45e57a93427bc1.
+Task 1–5: software implementations and 39 automated tests verified in cloud; camera and visual device acceptance remains open.
+Task 6: cloud build and actual unsigned IPA delivery verified; user signing and installation remains open.
+Prior Apple compile/test limitation has been resolved by cloud execution. Source and published repository preserved; no PR or branch cleanup needed for the explicitly authorized initial repository upload.

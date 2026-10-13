@@ -1,14 +1,14 @@
 # Windows 安装到 iPhone
 
-适用条件：iPhone 的系统为 iOS 16 或以上；有 Windows、数据线、GitHub 账号和 Apple 账号。没有 Mac 也能使用此流程。当前还没有实际云端编译结果，下面是工程准备的构建与安装路线。
+适用条件：iPhone 的系统为 iOS 16 或以上；有 Windows、数据线、GitHub 账号和 Apple 账号。没有 Mac 也能使用此流程。首个未签名真机 IPA 已通过云端编译及校验，尚待你在手机上签名安装和连接相机。
 
-## 1. 把工程放到自己的 GitHub 仓库
+## 1. 下载已经编译好的包
 
-推荐使用 GitHub Desktop，在当前工程目录添加本地仓库，把变更提交后发布到自己的仓库。可以选私有仓库；云端 Mac 构建会使用账号的 Actions 额度，额度与费用以账号设置为准。
+[点击下载 GX85Monitor-unsigned-IPA](https://github.com/a769568933/gx85-monitor-ios/actions/runs/38388698038/artifacts/11808055340)。登录自己的 GitHub 账号后下载 ZIP，解压得到 `GX85Monitor-unsigned.ipa`。继续下面第 3 步安装 AltStore。
 
-不要只上传压缩包。仓库根目录应直接包含 `GX85Monitor.xcodeproj`、`GX85Monitor`、`GX85Core`、`GX85MonitorTests`、`scripts` 和隐藏目录 `.github`。不要漏掉 `.github/workflows/ios-build.yml`。
+工程已在 [gx85-monitor-ios 私有仓库](https://github.com/a769568933/gx85-monitor-ios)，不需要再上传源码。产物保存 14 天，下载过期或需要重建时执行第 2 步。
 
-上传前请保留相机/Apple 账号密码在工程之外。工程不需要配置签名密码、开发者证书或其他 secrets。
+工程不需要配置签名密码、开发者证书或其他 secrets。Apple 账号只由你在安装工具中使用。
 
 ## 2. 云端编译并下载 IPA
 

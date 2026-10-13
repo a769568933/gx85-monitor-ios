@@ -2,7 +2,11 @@
 
 为松下 DMC-GX85 制作的 iPhone 无线监看与遥控拍照 App。界面参考 iPhone 原生相机：黑色背景、大快门、尽量大的完整取景画面；支持竖屏、两种横屏和全屏监看。
 
-**当前交付：源代码、Xcode 工程、自动测试及云端编译流程。尚未完成 Xcode 编译和 GX85 真机验证，尚未生成可安装 IPA。** 目前 Windows 环境的检查结果见 [验证记录](docs/VALIDATION.md)。
+**第一版未签名 IPA 已生成。39 项自动测试通过，iPhone 真机编译与打包校验通过；尚待签名安装和 GX85 实测。** 详情见 [验证记录](docs/VALIDATION.md)。
+
+[下载 iPhone 安装包 ZIP](https://github.com/a769568933/gx85-monitor-ios/actions/runs/38388698038/artifacts/11808055340) · [成功构建记录](https://github.com/a769568933/gx85-monitor-ios/actions/runs/38388698038)
+
+解压 ZIP 后得到 `GX85Monitor-unsigned.ipa`，用 Windows 上的 AltServer / 手机上的 AltStore Classic 签名安装。包面向 ARM64 iPhone，最低 iOS 16。GitHub 下载需要登录能访问此私有仓库的账号；构建产物保存 14 天，过期后可手动重新运行工作流。
 
 ## 可以做什么
 
@@ -17,7 +21,7 @@
 
 ## 只有 Windows 怎么安装
 
-按照 [Windows 安装说明](docs/WINDOWS_INSTALL.md)，把工程放到你自己的 GitHub 仓库，手动运行云端构建，在 Windows 上用 AltStore Classic 签名安装。
+工程已经上传到 [私有仓库](https://github.com/a769568933/gx85-monitor-ios)。按照 [Windows 安装说明](docs/WINDOWS_INSTALL.md) 下载现有 IPA，在 Windows 上用 AltStore Classic 签名安装。
 
 这个流程需要你的 GitHub 账号、Apple 账号、iPhone 和数据线。账号密码只由你在安装工具中填写。免费 Apple 账号安装的 App 需要定期刷新签名。
 
