@@ -41,9 +41,27 @@ jobs:
             -project GX85Monitor.xcodeproj \
             -scheme GX85Monitor \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -derivedDataPath build/Simulator \
             -resultBundlePath dist/iPhoneTests.xcresult \
             CODE_SIGNING_ALLOWED=NO \
             | tee dist/simulator-tests.log
+      - name: Capture actual iPhone app screen
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl install "$SIMULATOR_UDID" build/Simulator/Build/Products/Debug-iphonesimulator/GX85Monitor.app
+          xcrun simctl terminate "$SIMULATOR_UDID" com.gx85monitor.app || true
+          xcrun simctl launch "$SIMULATOR_UDID" com.gx85monitor.app
+          sleep 5
+          xcrun simctl io "$SIMULATOR_UDID" screenshot dist/GX85Monitor-iPhone-portrait.png
+          sips -g pixelWidth -g pixelHeight dist/GX85Monitor-iPhone-portrait.png
+      - name: Save iPhone screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: GX85Monitor-iPhone-screenshot
+          path: dist/GX85Monitor-iPhone-portrait.png
+          if-no-files-found: error
+          retention-days: 14
       - name: Build unsigned device IPA
         run: bash scripts/build-ipa.sh
       - name: Save install package
