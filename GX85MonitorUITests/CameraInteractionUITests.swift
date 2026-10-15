@@ -17,6 +17,7 @@ final class CameraInteractionUITests: XCTestCase {
         let requested = NSPredicate(format: "value == %@", "对焦请求:1")
         expectation(for: requested, evaluatedWith: app.descendants(matching: .any)["fixtureStatus"].firstMatch)
         waitForExpectations(timeout: 3)
+        XCTAssertTrue(app.descendants(matching: .any)["focusIndicator"].firstMatch.exists)
     }
 
     func testOverlayParameterControlDoesNotFocusImage() {
@@ -29,12 +30,20 @@ final class CameraInteractionUITests: XCTestCase {
         XCTAssertTrue(app.images["livePreview"].frame.contains(center), "The control must overlap the image for this regression test")
         iso.tap()
         app.buttons["400"].tap()
-        XCTAssertEqual(app.descendants(matching: .any)["fixtureStatus"].firstMatch.value as? String, "对焦请求:0")
+        assertNoFocus(in: app)
     }
 
     func testPortraitBlackBorderDoesNotSendFocus() {
         let app = launch()
         app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
-        XCTAssertEqual(app.descendants(matching: .any)["fixtureStatus"].firstMatch.value as? String, "对焦请求:0")
+        assertNoFocus(in: app)
+    }
+
+    private func assertNoFocus(in app: XCUIApplication) {
+        let badge = app.descendants(matching: .any)["fixtureStatus"].firstMatch
+        XCTAssertEqual(badge.value as? String, "对焦请求:0")
+        let unexpected = expectation(for: NSPredicate(format: "value != %@", "对焦请求:0"), evaluatedWith: badge)
+        unexpected.isInverted = true
+        waitForExpectations(timeout: 1)
     }
 }

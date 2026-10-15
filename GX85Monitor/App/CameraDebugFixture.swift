@@ -35,7 +35,8 @@ final class CameraDebugFixture {
         let settings = CameraSettings(defaults: UserDefaults(suiteName: "GX85-simulator-\(UUID().uuidString)")!)
         settings.accessID = "simulator-fixture"
         let frame = Self.frame()
-        session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { FixtureReceiver(frame: frame) })
+        // A single test card and a paused monitor clock keep UI-test idle detection deterministic.
+        session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { FixtureReceiver(frame: frame) }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) })
         session.connect()
     }
     private static func frame() -> Data {
@@ -102,10 +103,9 @@ private final class FixtureReceiver: LiveViewReceiving {
             let frame = self.frame
             task = Task.detached {
                 do {
-                    while !Task.isCancelled {
-                        onDatagram(frame)
-                        try await Task.sleep(nanoseconds: 200_000_000)
-                    }
+                    try await Task.sleep(nanoseconds: 100_000_000)
+                    try Task.checkCancellation()
+                    onDatagram(frame)
                 } catch { }
             }
         }

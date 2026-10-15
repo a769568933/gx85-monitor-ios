@@ -61,15 +61,24 @@ struct CameraView: View {
 
     private var preview: some View {
         GeometryReader { geometry in
+            let rect = PreviewLayout.fit(imageSize: session.image?.size ?? .zero, in: geometry.size)
             ZStack {
                 Color.black
                 if let image = session.image {
-                    let rect = PreviewLayout.fit(imageSize: image.size, in: geometry.size)
                     Image(uiImage: image).resizable()
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                         .accessibilityLabel("GX85 实时取景画面")
                         .accessibilityIdentifier("livePreview")
+                    if let request = session.focusRequest {
+                        RoundedRectangle(cornerRadius: 6).stroke(.yellow, lineWidth: 2)
+                            .frame(width: 64, height: 64)
+                            .position(x: rect.minX + request.point.x * rect.width, y: rect.minY + request.point.y * rect.height)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("对焦请求位置，尚未确认合焦")
+                            .accessibilityIdentifier("focusIndicator")
+                            .allowsHitTesting(false)
+                    }
                     if session.frameIsStale {
                         Label("画面已暂停", systemImage: "pause.circle")
                             .font(.callout.weight(.medium)).foregroundStyle(.yellow)
@@ -79,6 +88,10 @@ struct CameraView: View {
                     ConnectionGuideView(phase: session.phase, error: session.lastError, connect: session.connect)
                 }
             }
+            .contentShape(Rectangle())
+            .simultaneousGesture(SpatialTapGesture().onEnded { value in
+                if let point = PreviewLayout.focusPoint(at: value.location, in: rect) { session.focus(at: point) }
+            })
         }
     }
 

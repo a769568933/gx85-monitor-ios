@@ -5,6 +5,10 @@ import GX85Core
 
 @MainActor
 final class CameraSession: ObservableObject {
+    struct FocusRequest: Identifiable {
+        let id = UUID()
+        let point: CGPoint
+    }
     enum Phase: Equatable {
         case disconnected, connecting, waitingApproval, ready, monitoring, recovering, failed
         var title: String {
@@ -28,6 +32,7 @@ final class CameraSession: ObservableObject {
     @Published private(set) var selectedShootingMode: CameraShootingMode = .photo
     @Published private(set) var parameterOptions: [ExposureParameter: [CameraParameterOption]] = [:]
     @Published private(set) var parameterValues: [ExposureParameter: String] = [:]
+    @Published private(set) var focusRequest: FocusRequest?
     @Published private(set) var frameIsStale = false
     @Published private(set) var notice: String?
     @Published private(set) var lastError: String?
@@ -54,6 +59,7 @@ final class CameraSession: ObservableObject {
     private var parameterTask: Task<Void, Never>?
     private var parameterRequest = UUID()
     private var lastParameterWarning: String?
+    private var focusFeedbackTask: Task<Void, Never>?
     private var receiver: (any LiveViewReceiving)?
     private var connectionTask: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
@@ -397,6 +403,36 @@ final class CameraSession: ObservableObject {
         }
     }
 
+    func focus(at point: CGPoint) {
+        guard canCapture, let controls else { return }
+        focusFeedbackTask?.cancel()
+        let request = FocusRequest(point: point)
+        focusRequest = request
+        actionInProgress = true; policy.captureStarted()
+        let current = epoch
+        captureTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await controls.focus(at: point)
+                try self.check(current)
+                self.diagnostics.append("点按对焦：位置已请求，尚无合焦确认。")
+            } catch {
+                guard self.isCurrent(current), !Task.isCancelled else { return }
+                self.focusRequest = nil
+                self.notice = error.localizedDescription
+            }
+            guard self.isCurrent(current) else { return }
+            self.actionInProgress = false; self.captureTask = nil
+            self.policy.captureFinished(now: self.clock())
+            self.focusFeedbackTask = Task { [weak self] in
+                do { try await Task.sleep(nanoseconds: 3_000_000_000) } catch { return }
+                guard let self, self.isCurrent(current), self.focusRequest?.id == request.id else { return }
+                self.focusRequest = nil
+            }
+            if self.deferredRecovery { self.deferredRecovery = false; self.recover() }
+        }
+    }
+
     private func startMonitor(_ current: UUID) {
         startDisplayClock(current)
         monitorTask = Task { [weak self] in
@@ -509,6 +545,7 @@ final class CameraSession: ObservableObject {
         parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
         parameterService = nil
         parameterOptions = [:]; parameterValues = [:]; lastParameterWarning = nil
+        focusFeedbackTask?.cancel(); focusFeedbackTask = nil; focusRequest = nil
         controlState = CameraControlState(response: LumixResponse(status: .success))
         generation = UUID()
         decoder.reset(generation: generation)
