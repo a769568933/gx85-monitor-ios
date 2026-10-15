@@ -151,6 +151,16 @@
 			name = "GX85Monitor";
 			sourceTree = "<group>";
 		};
+		C0BC90A9CD8F2332223D132F = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraControlServiceTests.swift";
+			sourceTree = "<group>";
+		};
+		67E0796EF713F78E5E7B03D3 = {
+			isa = "PBXBuildFile";
+			fileRef = C0BC90A9CD8F2332223D132F;
+		};
 		40E6E239EAB1561138FF8532 = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "sourcecode.swift";
@@ -183,7 +193,7 @@
 		};
 		EEFE21A1443933CA4DE017DA = {
 			isa = "PBXGroup";
-			children = (40E6E239EAB1561138FF8532, 3DD6FE38F99A827C540B29B8, 980E0340A5E3504C560C26AB,);
+			children = (C0BC90A9CD8F2332223D132F, 40E6E239EAB1561138FF8532, 3DD6FE38F99A827C540B29B8, 980E0340A5E3504C560C26AB,);
 			name = "GX85MonitorTests";
 			sourceTree = "<group>";
 		};
@@ -283,7 +293,7 @@
 		1A2AAFC871EB5C3BDDDDE160 = {
 			isa = "PBXSourcesBuildPhase";
 			buildActionMask = 2147483647;
-			files = (A0DE1017FE51E3D6F09D8F8A, 516E1FC6000A644269BD1185, 8C8CE8E8529019258333363A,);
+			files = (67E0796EF713F78E5E7B03D3, A0DE1017FE51E3D6F09D8F8A, 516E1FC6000A644269BD1185, 8C8CE8E8529019258333363A,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D36D33020B6BB89396BD1B34 = {
