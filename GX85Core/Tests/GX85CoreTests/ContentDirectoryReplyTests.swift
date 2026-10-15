@@ -69,6 +69,40 @@ final class ContentDirectoryReplyTests: XCTestCase {
         XCTAssertThrowsError(try ContentDirectoryReply.parse(data: Data(repeating: 32, count: 4 * 1024 * 1024 + 1), cameraHost: host))
     }
 
+    func testLegacyLumixRAWResourcesDoNotBreakALaterAlbumPage() throws {
+        // Lumix RAW descriptors can omit the fourth colon. Keep the original
+        // distinct from the JPEG companion while accepting a mixed page.
+        let didl = """
+        <DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:u="urn:schemas-upnp-org:metadata-1-0/upnp/">
+          <item id="1030516"><dc:title>103-0516</dc:title><u:class>object.item.imageItem</u:class>
+            <res protocolInfo="http-get:*:application/octet-stream;PANASONIC.COM_PN=CAM_RAW_JPG">http://192.168.54.1:50001/DO1030516.JPG</res>
+            <res protocolInfo="http-get:*:application/octet-stream;PANASONIC.COM_PN=CAM_RAW">http://192.168.54.1:50001/DO1030516.RW2</res>
+          </item>
+          <item id="1030517"><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_ORG">http://192.168.54.1:50001/DO1030517.JPG</res></item>
+        </DIDL-Lite>
+        """
+        let page = try ContentDirectoryReply.parse(data: soap(didl, returned: 2, total: 82), cameraHost: host, startingIndex: 80)
+        XCTAssertEqual(page.items.map(\.id), ["1030516", "1030517"])
+        XCTAssertEqual(page.items[0].originalResource?.url.pathExtension, "RW2")
+        XCTAssertEqual(page.items[0].originalResource?.mimeType, "image/x-panasonic-rw2")
+        XCTAssertEqual(page.items[0].imagePreviewResource?.mimeType, "image/jpeg")
+        XCTAssertNil(page.nextStartingIndex)
+    }
+
+    func testLegacyDescriptorStillRejectsExternalMediaHost() {
+        let didl = "<DIDL-Lite><item id=\"r\"><res protocolInfo=\"http-get:*:application/octet-stream;PANASONIC.COM_PN=CAM_RAW\">http://evil.invalid/DO1030516.RW2</res></item></DIDL-Lite>"
+        XCTAssertThrowsError(try ContentDirectoryReply.parse(data: soap(didl, returned: 1, total: 1), cameraHost: host)) { error in
+            guard case CameraMediaError.invalidURL = error else { return XCTFail("Media host policy must be retained: \(error)") }
+        }
+    }
+
+    func testZeroReturnCanHaveAnEmptyResultAtEndOfCatalog() throws {
+        let page = try ContentDirectoryReply.parse(data: soap("", returned: 0, total: 80), cameraHost: host, startingIndex: 80)
+        XCTAssertTrue(page.items.isEmpty)
+        XCTAssertNil(page.nextStartingIndex)
+        XCTAssertThrowsError(try ContentDirectoryReply.parse(data: soap("", returned: 1, total: 80), cameraHost: host, startingIndex: 40))
+    }
+
     private func soap(_ didl: String, returned: Int, total: Int) -> Data {
         let escaped = didl.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;").replacingOccurrences(of: ">", with: "&gt;")
         return Data("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:BrowseResponse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\"><Result>\(escaped)</Result><NumberReturned>\(returned)</NumberReturned><TotalMatches>\(total)</TotalMatches><UpdateID>1</UpdateID></u:BrowseResponse></s:Body></s:Envelope>".utf8)

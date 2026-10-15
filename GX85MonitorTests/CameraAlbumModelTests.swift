@@ -44,6 +44,23 @@ final class CameraAlbumModelTests: XCTestCase {
         await album.close()
     }
 
+    func testFailedOlderPageCanRetrySameOffsetWithoutClearingLatestPhotos() async {
+        let latest = CameraMediaPage(items: [item("newest")], numberReturned: 1, totalMatches: 2, nextStartingIndex: 1)
+        let older = CameraMediaPage(items: [item("older")], numberReturned: 1, totalMatches: 2, nextStartingIndex: nil)
+        let client = RetryAlbumPages(first: latest, last: older)
+        let album = CameraAlbumModel(client: client)
+        album.loadNextPage(); await wait { !album.isLoading && album.items.count == 1 }
+        album.loadNextPage(); await wait { !album.isLoading && album.errorMessage != nil }
+        XCTAssertEqual(album.items.map(\.id), ["newest"])
+        XCTAssertFalse(album.hasMore, "An error must stop automatic loading until a manual retry")
+        album.loadNextPage(); await wait { !album.isLoading && album.items.count == 2 }
+        XCTAssertEqual(album.items.map(\.id), ["newest", "older"])
+        XCTAssertNil(album.errorMessage)
+        let offsets = await client.offsets
+        XCTAssertEqual(offsets, [0, 1, 1])
+        await album.close()
+    }
+
     func testLatePageAfterCloseCannotRepopulateAlbum() async {
         let page = CameraMediaPage(items: [item("late")], numberReturned: 1, totalMatches: 1, nextStartingIndex: nil)
         let client = AlbumPages([page], held: true)
@@ -57,6 +74,18 @@ final class CameraAlbumModelTests: XCTestCase {
         for _ in 0..<50 { await Task.yield() }
         XCTAssertTrue(album.items.isEmpty)
         XCTAssertTrue(album.isClosed)
+    }
+}
+
+private actor RetryAlbumPages: CameraMediaBrowsing {
+    let first: CameraMediaPage, last: CameraMediaPage
+    private(set) var offsets: [Int] = []
+    init(first: CameraMediaPage, last: CameraMediaPage) { self.first = first; self.last = last }
+    func browse(start: Int, count: Int, objectID: String) async throws -> CameraMediaPage {
+        offsets.append(start)
+        if offsets.count == 1 { return first }
+        if offsets.count == 2 { throw CameraMediaError.malformedDirectory }
+        return last
     }
 }
 
