@@ -4,14 +4,31 @@ import SwiftUI
 struct GX85MonitorApp: App {
     @StateObject private var session: CameraSession
     @Environment(\.scenePhase) private var scenePhase
+    #if DEBUG && targetEnvironment(simulator)
+    private let fixture: CameraDebugFixture?
+    #endif
 
     init() {
+        #if DEBUG && targetEnvironment(simulator)
+        fixture = ProcessInfo.processInfo.arguments.contains("--fixture-monitor") ? CameraDebugFixture() : nil
+        if let fixture {
+            _session = StateObject(wrappedValue: fixture.session)
+            return
+        }
+        #endif
         let settings = CameraSettings()
         _session = StateObject(wrappedValue: CameraSession(settings: settings))
     }
 
     var body: some Scene {
-        WindowGroup { CameraView(session: session).statusBarHidden() }
+        WindowGroup {
+            ZStack(alignment: .top) {
+                CameraView(session: session).statusBarHidden()
+                #if DEBUG && targetEnvironment(simulator)
+                if let fixture { FixtureStatusBadge(model: fixture.status).padding(.top, 96) }
+                #endif
+            }
+        }
             .onChange(of: scenePhase) { phase in
                 // A permission sheet makes the app inactive; only actual background stops the stream.
                 if phase == .background { session.setForeground(false) }

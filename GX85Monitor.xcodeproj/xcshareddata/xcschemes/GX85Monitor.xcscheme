@@ -12,6 +12,9 @@
       <TestableReference skipped="NO">
         <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="7EC8F98B7A265120217712DE" BuildableName="GX85MonitorTests.xctest" BlueprintName="GX85MonitorTests" ReferencedContainer="container:GX85Monitor.xcodeproj" />
       </TestableReference>
+      <TestableReference skipped="NO">
+        <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="CEFEF1F5CE13C5A04BC4C468" BuildableName="GX85MonitorUITests.xctest" BlueprintName="GX85MonitorUITests" ReferencedContainer="container:GX85Monitor.xcodeproj" />
+      </TestableReference>
     </Testables>
     <MacroExpansion>
       <BuildableReference BuildableIdentifier="primary" BlueprintIdentifier="29C7B681C8D62CBAC94D51C0" BuildableName="GX85Monitor.app" BlueprintName="GX85Monitor" ReferencedContainer="container:GX85Monitor.xcodeproj" />
