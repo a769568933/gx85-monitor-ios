@@ -14,8 +14,8 @@ a distinct stop-recording control available even while waiting for the first fra
 
 The live preview and its overlay remain geometrically unchanged when an image
 exists, including paused/recovering frames, native parameter wheels and notices.
-Connection notices use the connection layout's bottom margin rather than reserving
-space for a nonexistent shooting toolbar.
+Connection notices belong to the guide's scrollable content, so they cannot cover
+the separate stop-recording row or settings toolbar, even when expanded.
 
 Regression checks cover the real disconnected screen in portrait and both
 landscapes, title/toolbar separation, settings navigation, and stopping an active

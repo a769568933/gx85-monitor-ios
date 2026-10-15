@@ -20,13 +20,13 @@ struct CameraView: View {
                     preview.ignoresSafeArea()
                     monitoringControls(landscape: landscape)
                 }
-                if let message = session.notice {
+                if session.image != nil, let message = session.notice {
                     VStack {
                         Spacer(minLength: 0)
                         NoticeOverlay(message: message, onDismiss: session.clearNotice)
                             .frame(maxWidth: 560)
                             .padding(.horizontal, landscape ? 108 : 12)
-                            .padding(.bottom, session.image == nil || fullscreen ? 12 : (landscape ? 12 : 168))
+                            .padding(.bottom, fullscreen ? 12 : (landscape ? 12 : 168))
                     }
                 }
                 if openingAlbum {
@@ -56,7 +56,8 @@ struct CameraView: View {
                 iconButton("gearshape", label: "设置") { showSettings = true }
             }
             .padding(.horizontal, 12).frame(height: 44)
-            ConnectionGuideView(phase: session.phase, error: session.lastError, connect: session.connect)
+            ConnectionGuideView(phase: session.phase, error: session.lastError, notice: session.notice,
+                                clearNotice: session.clearNotice, connect: session.connect)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             // A missing video frame must not remove control of an active recording.
             if session.controlState.recordingState == .recording {

@@ -72,6 +72,10 @@ final class CameraPresentationUITests: XCTestCase {
         XCTAssertTrue(stop.waitForExistence(timeout: 8))
         XCTAssertEqual(stop.label, "停止录像")
         XCTAssertTrue(stop.isEnabled)
+        app.buttons["fixtureNotice"].tap()
+        let notice = app.descendants(matching: .any)["cameraNotice"].firstMatch
+        XCTAssertTrue(notice.waitForExistence(timeout: 3))
+        XCTAssertFalse(notice.frame.intersects(stop.frame), "Connection errors must not cover the recording stop control")
         stop.tap()
         expectation(for: NSPredicate { _, _ in !app.buttons["primaryShutter"].exists }, evaluatedWith: app)
         waitForExpectations(timeout: 5)
