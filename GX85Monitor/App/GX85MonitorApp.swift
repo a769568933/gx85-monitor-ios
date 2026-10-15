@@ -25,7 +25,11 @@ struct GX85MonitorApp: App {
             ZStack(alignment: .top) {
                 CameraView(session: session).statusBarHidden()
                 #if DEBUG && targetEnvironment(simulator)
-                if let fixture { FixtureStatusBadge(model: fixture.status).padding(.top, 96) }
+                if let fixture {
+                    FixtureStatusBadge(model: fixture.status, onNotice: {
+                        session.showNotice("模拟长提示：相机仅确认收到指令，尚未确认生成照片。此处用于验证长提示覆盖画面时，取景位置和大小保持不变。请以相机存储卡中的实际文件为准。")
+                    }).padding(.top, 96)
+                }
                 #endif
             }
         }

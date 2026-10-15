@@ -79,7 +79,7 @@ for scope in ['project', 'app', 'tests', 'uitests']:
         else:
             settings = dict(PRODUCT_NAME='$(TARGET_NAME)', PRODUCT_BUNDLE_IDENTIFIER='com.gx85monitor.' + scope, TARGETED_DEVICE_FAMILY='1', SUPPORTED_PLATFORMS='iphoneos iphonesimulator', CODE_SIGN_STYLE='Automatic', SWIFT_EMIT_LOC_STRINGS='YES', LD_RUNPATH_SEARCH_PATHS=['$(inherited)', '@executable_path/Frameworks'])
             if scope == 'app':
-                settings.update(GENERATE_INFOPLIST_FILE='NO', INFOPLIST_FILE='GX85Monitor/Info.plist', ASSETCATALOG_COMPILER_APPICON_NAME='AppIcon', ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME='AccentColor', CURRENT_PROJECT_VERSION='1', MARKETING_VERSION='0.1.0')
+                settings.update(GENERATE_INFOPLIST_FILE='NO', INFOPLIST_FILE='GX85Monitor/Info.plist', ASSETCATALOG_COMPILER_APPICON_NAME='AppIcon', ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME='AccentColor', CURRENT_PROJECT_VERSION='2', MARKETING_VERSION='0.2.0')
             elif scope == 'tests':
                 settings.update(GENERATE_INFOPLIST_FILE='YES', TEST_HOST='$(BUILT_PRODUCTS_DIR)/GX85Monitor.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/GX85Monitor', BUNDLE_LOADER='$(TEST_HOST)', LD_RUNPATH_SEARCH_PATHS=['$(inherited)', '@executable_path/Frameworks', '@loader_path/Frameworks'])
             else:

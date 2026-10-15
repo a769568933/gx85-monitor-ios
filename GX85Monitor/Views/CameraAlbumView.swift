@@ -19,6 +19,11 @@ struct CameraAlbumView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                #if DEBUG && targetEnvironment(simulator)
+                if ProcessInfo.processInfo.arguments.contains("--fixture-monitor") {
+                    Text("模拟相册 · 非相机连接").font(.caption).foregroundStyle(.yellow).padding(8)
+                }
+                #endif
                 if let error = model.errorMessage {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(error).font(.footnote).foregroundStyle(.yellow)

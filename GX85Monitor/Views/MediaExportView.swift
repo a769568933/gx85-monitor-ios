@@ -7,6 +7,7 @@ struct MediaExportView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var fileRequest: ExportFileRequest?
+    @State private var started = false
     var body: some View {
         NavigationStack {
         ScrollView {
@@ -39,7 +40,7 @@ struct MediaExportView: View {
         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { model.cancel(); dismiss() } } }
         }
         .preferredColorScheme(.dark)
-        .task { model.start(items) }
+        .task { if !started { started = true; model.start(items) } }
         .onDisappear { model.cancel() }
         .onChange(of: scenePhase) { phase in if phase == .background { model.cancel(); fileRequest = nil } }
         .sheet(item: $fileRequest, onDismiss: { Task { await model.completeFilesExport(success: false) } }) { request in

@@ -10,7 +10,9 @@ final class FixtureStatusModel: ObservableObject {
 
 struct FixtureStatusBadge: View {
     @ObservedObject var model: FixtureStatusModel
+    var onNotice: () -> Void = {}
     var body: some View {
+        HStack(spacing: 6) {
         Text("模拟画面 · 非相机连接")
             .font(.caption.weight(.semibold)).foregroundStyle(.yellow).padding(6)
             .background(.black.opacity(0.85), in: Capsule())
@@ -19,6 +21,10 @@ struct FixtureStatusBadge: View {
             .accessibilityValue("对焦请求:\(model.focusRequests)")
             .accessibilityIdentifier("fixtureStatus")
             .allowsHitTesting(false)
+        Button(action: onNotice) { Image(systemName: "text.bubble").frame(width: 44, height: 44) }
+            .foregroundStyle(.yellow).background(.black.opacity(0.8), in: Circle())
+            .accessibilityLabel("显示模拟提示").accessibilityIdentifier("fixtureNotice")
+        }
     }
 }
 
@@ -29,14 +35,19 @@ final class CameraDebugFixture {
     init() {
         let status = FixtureStatusModel()
         self.status = status
-        let commands = FixtureCommands(onFocus: { [weak status] in
+        let commands = FixtureCommands(recording: ProcessInfo.processInfo.arguments.contains("--fixture-recording"), onFocus: { [weak status] in
             Task { @MainActor in status?.focusRequests += 1 }
         })
         let settings = CameraSettings(defaults: UserDefaults(suiteName: "GX85-simulator-\(UUID().uuidString)")!)
         settings.accessID = "simulator-fixture"
         let frame = Self.frame()
+        FixtureMediaProtocol.frame = frame
         // A single test card and a paused monitor clock keep UI-test idle detection deterministic.
-        session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { FixtureReceiver(frame: frame) }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) })
+        session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { FixtureReceiver(frame: frame) }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, makeMediaClient: { endpoint in
+            let config = URLSessionConfiguration.ephemeral
+            config.protocolClasses = [FixtureMediaProtocol.self]
+            return CameraMediaClient(endpoint: endpoint, configuration: config)
+        })
         session.connect()
     }
     private static func frame() -> Data {
@@ -65,9 +76,10 @@ final class CameraDebugFixture {
 
 private actor FixtureCommands: CommandSending {
     private var recording = false
+    private var playback = false
     private var values = ["iso": "100", "focal": "392/256", "shtrspeed": "1780/256", "focusmode": "afs"]
     private let onFocus: @Sendable () -> Void
-    init(onFocus: @escaping @Sendable () -> Void) { self.onFocus = onFocus }
+    init(recording: Bool, onFocus: @escaping @Sendable () -> Void) { self.recording = recording; self.onFocus = onFocus }
     func send(_ command: LumixCommand) async throws -> LumixResponse {
         if command == .getInfo("allmenu") {
             let xml = """
@@ -87,8 +99,32 @@ private actor FixtureCommands: CommandSending {
         if case .touchFocus = command { onFocus() }
         if command == .videoStart { recording = true }
         if command == .videoStop { recording = false }
-        return LumixResponse(status: .success, fields: ["cammode": "recmode", "rec": recording ? "on" : "off", "lens": "simulator-lens", "sdcardstatus": "write_enable", "recremaincapacity": "200"])
+        if command == .playbackMode { playback = true }
+        if command == .recordMode { playback = false }
+        return LumixResponse(status: .success, fields: ["cammode": playback ? "playmode" : "recmode", "rec": recording ? "on" : "off", "lens": "simulator-lens", "sdcardstatus": "write_enable", "recremaincapacity": "200"])
     }
+}
+
+private final class FixtureMediaProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    private static var stored = Data()
+    static var frame: Data { get { lock.withLock { stored } } set { lock.withLock { stored = newValue } } }
+    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "192.168.54.1" }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let data: Data
+        if request.httpMethod == "POST" {
+            let xml = """
+            <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:BrowseResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1"><Result><![CDATA[<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="sim-photo"><dc:title>SIM-PHOTO.JPG</dc:title><upnp:class>object.item.imageItem.photo</upnp:class><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_TN">http://192.168.54.1/thumb.JPG</res><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_ORG">http://192.168.54.1/photo.JPG</res></item><item id="sim-video"><dc:title>SIM-VIDEO.MP4</dc:title><upnp:class>object.item.videoItem</upnp:class><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_LRGTN">http://192.168.54.1/poster.JPG</res></item></DIDL-Lite>]]></Result><NumberReturned>2</NumberReturned><TotalMatches>2</TotalMatches><UpdateID>simulation</UpdateID></u:BrowseResponse></s:Body></s:Envelope>
+            """
+            data = Data(xml.utf8)
+        } else { data = Self.frame }
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Length": String(data.count)])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: data)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() {}
 }
 
 private final class FixtureReceiver: LiveViewReceiving {

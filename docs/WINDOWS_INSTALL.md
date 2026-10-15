@@ -4,7 +4,7 @@
 
 ## 1. 下载已经编译好的包
 
-[点击下载 GX85Monitor-unsigned-IPA](https://github.com/a769568933/gx85-monitor-ios/actions/runs/38388698038/artifacts/11808055340)。登录自己的 GitHub 账号后下载 ZIP，解压得到 `GX85Monitor-unsigned.ipa`。继续下面第 3 步安装 AltStore。
+[查看 0.2 分支的成功构建](https://github.com/a769568933/gx85-monitor-ios/actions?query=branch%3Acodex%2Fgx85-controls)，下载其中 `GX85Monitor-unsigned-IPA`。登录自己的 GitHub 账号后下载 ZIP，解压得到 `GX85Monitor-unsigned.ipa`。已有可用签名工具时直接导入新版 IPA；下文保留 AltStore 安装参考，不要求重装 SideStore 或 iLoader。
 
 工程已在 [gx85-monitor-ios 私有仓库](https://github.com/a769568933/gx85-monitor-ios)，不需要再上传源码。产物保存 14 天，下载过期或需要重建时执行第 2 步。
 
@@ -14,7 +14,7 @@
 
 1. 在 GitHub 仓库打开 **Actions**。
 2. 如 GitHub 提示启用工作流，允许在自己的仓库启用。
-3. 选择 **Build GX85 iPhone App**，点 **Run workflow**。
+3. 选择 **Build GX85 iPhone App**，点 **Run workflow**，分支选择 **codex/gx85-controls**（0.2 开发版）。
 4. 工作流先运行协议及 iPhone 测试，再生成真机包。测试或编译失败时不会提供成功的 IPA；可以下载验证日志用于修复。
 5. 工作流全部成功后，在运行页面的 Artifacts 中下载 **GX85Monitor-unsigned-IPA**。
 6. 解压下载的 ZIP，得到 **GX85Monitor-unsigned.ipa**。它尚未签名，需要下面的安装工具处理，不能直接点开安装。
