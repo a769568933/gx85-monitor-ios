@@ -59,24 +59,35 @@ final class CameraControlServiceTests: XCTestCase {
         }
     }
 
-    func testAutomaticFocusPrecedesShutterButMFIsPreserved() async {
+    func testCaptureUsesCameraFocusPriorityWithoutSeparateAFCommand() async {
         for scenario in [ControlCamera.Scenario.autoFocus, .ackOnly] {
             let camera = ControlCamera(scenario)
             _ = await service(camera).capturePhoto()
             let calls = await camera.calls
-            if scenario == .autoFocus {
-                XCTAssertLessThan(calls.firstIndex(of: .autoFocus) ?? Int.max, calls.firstIndex(of: .capture) ?? 0)
-            } else { XCTAssertFalse(calls.contains(.autoFocus)) }
+            XCTAssertFalse(calls.contains(.autoFocus))
+            XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
             XCTAssertFalse(calls.contains { if case .setSetting(type: "focusmode", value: _) = $0 { return true }; return false })
         }
     }
 
-    func testExplicitAFFailureDoesNotForceShutter() async {
-        let camera = ControlCamera(.focusFailure)
+    func testUnsupportedOneShotAFDoesNotBlockGX80Capture() async {
+        // The user's GX80 log reports focusmode=afs, followed by oneshot_af err_reject.
+        let camera = ControlCamera(.unsupportedAF)
         let result = await service(camera).capturePhoto()
-        guard case .rejected = result else { return XCTFail("Failed AF must reject") }
+        XCTAssertEqual(result, .acceptedUnconfirmed)
         let calls = await camera.calls
-        XCTAssertFalse(calls.contains(.capture))
+        XCTAssertFalse(calls.contains(.autoFocus))
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertEqual(calls.filter { $0 == .releaseCapture }.count, 1)
+    }
+
+    func testCameraRejectingCaptureForFocusIsNotOverriddenOrRetried() async {
+        let camera = ControlCamera(.captureFocusFailure)
+        let result = await service(camera).capturePhoto()
+        XCTAssertEqual(result, .rejected("err_focus"))
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertFalse(calls.contains { if case .setSetting(type: "focusmode", value: _) = $0 { return true }; return false })
     }
 
     func testReleaseFailureDoesNotClaimConfirmedCapture() async {
@@ -140,7 +151,7 @@ final class CameraControlServiceTests: XCTestCase {
 }
 
 private actor ControlCamera: CommandSending {
-    enum Scenario: Equatable { case ackOnly, timeout, busy, cardMissing, unknownRecording, autoFocus, focusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
+    enum Scenario: Equatable { case ackOnly, timeout, busy, cardMissing, unknownRecording, autoFocus, unsupportedAF, captureFocusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
     let scenario: Scenario
     private(set) var calls: [LumixCommand] = []
     private(set) var captureStarted = false
@@ -156,11 +167,12 @@ private actor ControlCamera: CommandSending {
             return LumixResponse(status: .success, fields: fields)
         }
         if command == .getSetting("focusmode") {
-            return LumixResponse(status: .success, fields: ["focusmode": [.autoFocus, .focusFailure].contains(scenario) ? "afs" : "mf"])
+            return LumixResponse(status: .success, fields: ["focusmode": [.autoFocus, .unsupportedAF, .captureFocusFailure].contains(scenario) ? "afs" : "mf"])
         }
-        if command == .autoFocus && scenario == .focusFailure { throw CommandError.cameraRejected("err_focus") }
+        if command == .autoFocus && scenario == .unsupportedAF { throw CommandError.cameraRejected("err_reject") }
         if command == .capture {
             captureStarted = true
+            if scenario == .captureFocusFailure { throw CommandError.cameraRejected("err_focus") }
             if scenario == .timeout { throw CommandError.timedOut }
             if scenario == .slowCapture { try await Task.sleep(nanoseconds: 50_000_000) }
         }
