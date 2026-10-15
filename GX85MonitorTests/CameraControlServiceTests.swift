@@ -4,6 +4,56 @@ import GX85Core
 @testable import GX85Monitor
 
 final class CameraControlServiceTests: XCTestCase {
+    func testGX85TouchFocusUsesNewTouchProtocolRatherThanLegacyTouchAF() async throws {
+        let camera = ControlCamera(.autoFocus)
+        try await service(camera).focus(at: CGPoint(x: 0.25, y: 0.75))
+        let calls = await camera.calls
+        let command = try XCTUnwrap(calls.first { if case .touchFocus = $0 { return true }; return false })
+        let url = try command.makeURL(endpoint: CameraEndpoint(host: "192.168.54.1"))
+        let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(query, [URLQueryItem(name: "mode", value: "camctrl"), URLQueryItem(name: "type", value: "touch"), URLQueryItem(name: "value", value: "250/750"), URLQueryItem(name: "value2", value: "on")])
+        XCTAssertFalse(calls.contains(.capture))
+        XCTAssertFalse(calls.contains(.autoFocus))
+    }
+
+    func testGX85PlaybackWithoutRecFieldCanRestoreMonitoring() async throws {
+        let camera = FieldPlaybackCamera(inPlayback: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let state = try await controls.leavePlayback(port: 49152)
+        XCTAssertEqual(state.rawFields["cammode"], "rec")
+        XCTAssertEqual(state.recordingState, .stopped)
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .recordMode }.count, 1)
+        XCTAssertEqual(calls.filter { $0 == .startStream(port: 49152) }.count, 1)
+        XCTAssertFalse(calls.contains(.videoStop))
+    }
+
+    func testPlaybackEntryWaitsForPlayInsteadOfAcceptingGX85RecAlias() async throws {
+        let camera = FieldPlaybackCamera(inPlayback: false, delayedEntry: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let state = try await controls.enterPlayback()
+        XCTAssertEqual(state.rawFields["cammode"], "play")
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .state }.count, 4)
+    }
+
+    func testPlaybackRestoreDoesNotStartStreamWhileCameraStillReportsPlay() async {
+        let camera = FieldPlaybackCamera(inPlayback: true, rejectsExit: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        do { _ = try await controls.leavePlayback(port: 49152); XCTFail("Play acknowledgment must not count as record-mode transition") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.startStream(port: 49152)))
+    }
+
+    func testGX85ZeroRemainingCapacityPreventsShutter() async {
+        let camera = ControlCamera(.gx85FullCard)
+        let result = await service(camera).capturePhoto()
+        guard case .rejected = result else { return XCTFail("GX85 remaincapacity=0 must block capture") }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.capture))
+    }
+
     func testUnknownRecordingDoesNotMutateModeWhenRestoringPlayback() async {
         let camera = ControlCamera(.unknownRecording)
         do { _ = try await service(camera).leavePlayback(port: 49152); XCTFail("Unknown recording state must not switch camera mode") }
@@ -152,7 +202,7 @@ final class CameraControlServiceTests: XCTestCase {
 }
 
 private actor ControlCamera: CommandSending {
-    enum Scenario: Equatable { case ackOnly, timeout, busy, cardMissing, unknownRecording, autoFocus, unsupportedAF, captureFocusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
+    enum Scenario: Equatable { case ackOnly, timeout, busy, cardMissing, gx85FullCard, unknownRecording, autoFocus, unsupportedAF, captureFocusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
     let scenario: Scenario
     private(set) var calls: [LumixCommand] = []
     private(set) var captureStarted = false
@@ -165,6 +215,10 @@ private actor ControlCamera: CommandSending {
             if scenario == .busy { fields["busy"] = "on" }
             if scenario == .cardMissing { fields["sdcardstatus"] = "no_card" }
             if scenario == .unknownRecording { fields.removeValue(forKey: "rec") }
+            if scenario == .gx85FullCard {
+                fields.removeValue(forKey: "recremaincapacity")
+                fields["remaincapacity"] = "0"
+            }
             return LumixResponse(status: .success, fields: fields)
         }
         if command == .getSetting("focusmode") {
@@ -183,6 +237,35 @@ private actor ControlCamera: CommandSending {
             if command == .videoStop { recording = false }
         }
         if case .setSetting = command, scenario == .rejectParameter { throw CommandError.cameraRejected("err_reject") }
+        return LumixResponse(status: .success)
+    }
+}
+
+/// Field reply shape: GX85 uses cammode=play and omits rec during playback.
+private actor FieldPlaybackCamera: CommandSending {
+    private var inPlayback: Bool
+    private let delayedEntry: Bool
+    private let rejectsExit: Bool
+    private var entryReads: Int?
+    private(set) var calls: [LumixCommand] = []
+    init(inPlayback: Bool, delayedEntry: Bool = false, rejectsExit: Bool = false) {
+        self.inPlayback = inPlayback; self.delayedEntry = delayedEntry; self.rejectsExit = rejectsExit
+    }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        calls.append(command)
+        if command == .playbackMode {
+            if delayedEntry { entryReads = 0 } else { inPlayback = true }
+        }
+        if command == .recordMode, !rejectsExit { inPlayback = false; entryReads = nil }
+        if command == .state {
+            if let reads = entryReads {
+                if reads >= 2 { inPlayback = true; entryReads = nil } else { entryReads = reads + 1 }
+            }
+            let xml = inPlayback
+                ? "<camrply><result>ok</result><state><cammode>play</cammode><play>stop</play><sd_access>off</sd_access></state></camrply>"
+                : "<camrply><result>ok</result><state><cammode>rec</cammode><rec>off</rec><remaincapacity>4041</remaincapacity><sd_access>off</sd_access></state></camrply>"
+            return try LumixResponse.parse(data: Data(xml.utf8))
+        }
         return LumixResponse(status: .success)
     }
 }
