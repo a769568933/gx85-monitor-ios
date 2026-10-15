@@ -13,6 +13,44 @@ final class CameraSessionTests: XCTestCase {
         return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: clock, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() }, makeMediaClient: { CameraMediaClient(endpoint: $0) })
     }
 
+    func testConnectionUpgradesAdvertisedQVGAStreamBeforeStartingMonitoring() async {
+        let commands = TestCommands()
+        await commands.configureLiveView(size: "qvga")
+        let session = makeSession(commands)
+        session.connect(); await waitUntil { session.canCapture }
+        let size = await commands.liveViewSize
+        let streamSize = await commands.sizeWhenStreamStarted
+        XCTAssertEqual(size, "vga")
+        XCTAssertEqual(streamSize, "vga")
+        session.disconnect()
+    }
+
+    func testUnknownHigherStreamSettingIsNotDowngradedToVGA() async {
+        let commands = TestCommands()
+        await commands.configureLiveView(size: "1280x960")
+        let session = makeSession(commands)
+        session.connect(); await waitUntil { session.canCapture }
+        let size = await commands.liveViewSize
+        XCTAssertEqual(size, "1280x960")
+        session.disconnect()
+    }
+
+    func testMonitoringPreservesReceivedPixelsAndReportsActualResolution() async {
+        let commands = TestCommands(), receiver = TestReceiver()
+        let session = makeSession(commands, receiver: receiver)
+        session.connect(); await waitUntil { session.canCapture }
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let source = UIGraphicsImageRenderer(size: CGSize(width: 1280, height: 960), format: format).image { _ in
+            UIColor.white.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: 1280, height: 960))
+        }
+        receiver.emit(source.jpegData(compressionQuality: 0.95)!)
+        await waitUntil { session.image != nil }
+        XCTAssertEqual(session.image?.cgImage?.width, 1280)
+        XCTAssertEqual(session.image?.cgImage?.height, 960)
+        XCTAssertTrue(session.diagnostics.text.contains("1280×960"))
+        session.disconnect()
+    }
+
     func testRecordingTimerStartsOnlyAfterConfirmationAndStopsWithRecording() async {
         let commands = TestCommands(), time = ManualClock()
         let session = makeSession(commands, clock: { time.now })
@@ -342,6 +380,9 @@ final class CameraSessionTests: XCTestCase {
 }
 
 private actor TestCommands: CommandSending {
+    private(set) var liveViewSize: String?
+    private(set) var sizeWhenStreamStarted: String?
+    func configureLiveView(size: String) { liveViewSize = size }
     var captureCount = 0
     var videoStartCount = 0
     var videoStopCount = 0
@@ -377,7 +418,18 @@ private actor TestCommands: CommandSending {
         if command == .playbackMode { playbackCount += 1; playback = true }
         if command == .recordMode { recordModeCount += 1; playback = false }
         if command == .stopStream { stopStreamCount += 1 }
-        if case .startStream = command { startStreamCount += 1 }
+        if case .startStream = command { startStreamCount += 1; sizeWhenStreamStarted = liveViewSize }
+        if liveViewSize != nil {
+            if command == .getInfo("allmenu") {
+                let xml = "<camrply><result>ok</result><menuset model=\"GX80\"><item id=\"menu_item_id_liveview_quality\"><item id=\"menu_item_id_liveviewsize_vga\" cmd_mode=\"setsetting\" cmd_type=\"liveviewsize\" cmd_value=\"vga\"/><item id=\"menu_item_id_liveviewsize_qvga\" cmd_mode=\"setsetting\" cmd_type=\"liveviewsize\" cmd_value=\"qvga\"/></item></menuset></camrply>"
+                return try LumixResponse.parse(data: Data(xml.utf8))
+            }
+            if command == .getSetting("liveviewsize") { return LumixResponse(status: .success, fields: ["liveviewsize": liveViewSize!]) }
+            if case .setSetting(type: "liveviewsize", value: let value) = command {
+                _ = try command.makeURL(endpoint: CameraEndpoint(host: "192.168.54.1"))
+                liveViewSize = value
+            }
+        }
         if command == .videoStart { videoStartCount += 1; recording = true }
         if command == .videoStop { videoStopCount += 1; recording = false }
         if command == .state {

@@ -29,9 +29,77 @@ final class CameraMediaClientTests: XCTestCase {
         XCTAssertEqual(request.httpMethod, "POST")
         XCTAssertEqual(request.value(forHTTPHeaderField: "SOAPAction"), "\"urn:schemas-upnp-org:service:ContentDirectory:1#Browse\"")
         let body = String(data: try XCTUnwrap(request.httpBody), encoding: .utf8) ?? ""
-        XCTAssertTrue(body.contains("<RequestedCount>40</RequestedCount>"))
+        XCTAssertTrue(body.contains("<RequestedCount>1</RequestedCount>"))
         XCTAssertTrue(body.contains("<StartingIndex>0</StartingIndex>"))
         XCTAssertTrue(body.contains("<BrowseFlag>BrowseDirectChildren</BrowseFlag>"))
+    }
+
+    func testNewestFirstPagingStartsAtCatalogTailAndNeverReordersLoadedPages() async throws {
+        MediaStubProtocol.set { request in Self.catalogReply(request, total: 85) }
+        let camera = try client()
+        let first = try await camera.browse(start: 0, count: 40)
+        XCTAssertEqual(first.items.first?.id, "84")
+        XCTAssertEqual(first.items.last?.id, "45")
+        XCTAssertEqual(first.nextStartingIndex, 40)
+        let second = try await camera.browse(start: 40, count: 40)
+        let last = try await camera.browse(start: 80, count: 40)
+        XCTAssertEqual(second.items.first?.id, "44")
+        XCTAssertEqual(second.items.last?.id, "5")
+        XCTAssertEqual(last.items.map(\.id), ["4", "3", "2", "1", "0"])
+        XCTAssertNil(last.nextStartingIndex)
+        XCTAssertEqual(Set((first.items + second.items + last.items).map(\.id)).count, 85)
+        let requests = MediaStubProtocol.requests.map { Self.range($0) }
+        XCTAssertEqual(requests.map(\.0), [0, 45, 5, 0])
+        XCTAssertEqual(requests.map(\.1), [1, 40, 40, 5])
+    }
+
+    func testCameraReturningShortChunksDoesNotSkipOrDuplicateOlderPhotos() async throws {
+        MediaStubProtocol.set { request in Self.catalogReply(request, total: 43, cap: 7) }
+        let camera = try client()
+        let first = try await camera.browse(start: 0, count: 40)
+        let last = try await camera.browse(start: 40, count: 40)
+        XCTAssertEqual(first.items.count, 40)
+        XCTAssertEqual(first.items.first?.id, "42")
+        XCTAssertEqual(first.items.last?.id, "3")
+        XCTAssertEqual(last.items.map(\.id), ["2", "1", "0"])
+        XCTAssertNil(last.nextStartingIndex)
+        XCTAssertEqual(MediaStubProtocol.requests.count, 8)
+    }
+
+    func testReloadReprobesTotalSoNewCaptureAppearsFirst() async throws {
+        MediaStubProtocol.set { request in Self.catalogReply(request, total: 2) }
+        let camera = try client()
+        let before = try await camera.browse(start: 0, count: 40)
+        XCTAssertEqual(before.items.first?.id, "1")
+        MediaStubProtocol.set { request in Self.catalogReply(request, total: 3) }
+        let after = try await camera.browse(start: 0, count: 40)
+        XCTAssertEqual(after.items.map(\.id), ["2", "1", "0"])
+    }
+
+    func testCatalogChangeBetweenPagesDoesNotMixOldAndNewOffsets() async throws {
+        MediaStubProtocol.set { request in Self.catalogReply(request, total: 45) }
+        let camera = try client()
+        _ = try await camera.browse(start: 0, count: 40)
+        MediaStubProtocol.set { request in Self.catalogReply(request, total: 46) }
+        do { _ = try await camera.browse(start: 40, count: 40); XCTFail("Changed catalog must require reload") } catch { }
+    }
+
+    private static func range(_ request: URLRequest) -> (Int, Int) {
+        let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
+        func number(_ tag: String) -> Int {
+            guard let after = body.components(separatedBy: "<\(tag)>").dropFirst().first,
+                  let raw = after.components(separatedBy: "</\(tag)>").first else { return -1 }
+            return Int(raw) ?? -1
+        }
+        return (number("StartingIndex"), number("RequestedCount"))
+    }
+
+    private static func catalogReply(_ request: URLRequest, total: Int, cap: Int = 40) -> Data {
+        let (start, count) = range(request)
+        guard start >= 0, count > 0 else { return Data() }
+        let end = min(total, start + min(count, cap))
+        let items = start < end ? (start..<end).map { "<item id=\"\($0)\"><res protocolInfo=\"http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_ORG\">http://192.168.54.1/DO\($0).JPG</res></item>" }.joined() : ""
+        return Data("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:BrowseResponse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\"><Result><![CDATA[<DIDL-Lite>\(items)</DIDL-Lite>]]></Result><NumberReturned>\(max(0, end - start))</NumberReturned><TotalMatches>\(total)</TotalMatches><UpdateID>1</UpdateID></u:BrowseResponse></s:Body></s:Envelope>".utf8)
     }
 
     func testInvalidPageRequestNeverMakesHTTPCall() async throws {
