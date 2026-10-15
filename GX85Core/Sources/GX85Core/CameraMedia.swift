@@ -38,10 +38,13 @@ public struct CameraMediaItem: Identifiable, Equatable, Sendable {
         var seen = Set<URL>()
         return candidates.filter { seen.insert($0.url).inserted }.prefix(4).map { $0 }
     }
-    public var imagePreviewResource: CameraMediaResource? {
-        resources.first { $0.role == .preview && $0.mimeType == "image/jpeg" }
-            ?? resources.first { $0.role == .original && $0.mimeType == "image/jpeg" }
-            ?? thumbnailResource
+    public var imagePreviewResource: CameraMediaResource? { imagePreviewCandidates.first }
+    public var imagePreviewCandidates: [CameraMediaResource] {
+        let preferred = resources.filter { $0.role == .preview && $0.mimeType == "image/jpeg" }
+            + resources.filter { $0.role == .original && $0.mimeType == "image/jpeg" }
+            + thumbnailCandidates
+        var seen = Set<URL>()
+        return preferred.filter { seen.insert($0.url).inserted }.prefix(4).map { $0 }
     }
 }
 

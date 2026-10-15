@@ -36,7 +36,7 @@ struct CameraAlbumView: View {
                 if closing { Spacer(); ProgressView("返回监看中"); Spacer() }
                 else {
                     ScrollView {
-                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 3)], spacing: 10) {
+                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 96), spacing: 3, alignment: .top)], spacing: 10) {
                             ForEach(model.items) { item in
                                 VStack(spacing: 4) {
                                     ZStack(alignment: .topTrailing) {

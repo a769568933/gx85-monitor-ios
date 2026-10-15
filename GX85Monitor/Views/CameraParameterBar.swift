@@ -104,20 +104,18 @@ private struct ParameterWheelPanel: View {
 
     private func applyAfterSettling(_ value: String) {
         pending?.cancel()
+        let connection = session.connectionIdentity
         pending = Task { @MainActor in
             do {
                 try await Task.sleep(nanoseconds: 350_000_000)
                 // Retain only the latest settled choice while a previous write finishes.
-                for _ in 0..<100 where session.actionInProgress {
+                while session.actionInProgress {
+                    guard session.connectionIdentity == connection else { return }
                     try await Task.sleep(nanoseconds: 50_000_000)
                 }
                 try Task.checkCancellation()
-                guard draft == value, session.isActive,
+                guard draft == value, session.connectionIdentity == connection, session.canCapture,
                       let option = enabled.first(where: { $0.rawValue == value }) else { return }
-                guard !session.actionInProgress else {
-                    session.showNotice("当前操作尚未完成，请稍后再滑动选择。")
-                    return
-                }
                 if session.parameterValues[parameter] != option.label {
                     session.updateParameter(parameter, option: option)
                 }

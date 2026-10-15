@@ -23,8 +23,17 @@ final class CameraThumbnailLoader: ObservableObject {
         return nil
     }
 
-    func load(_ resource: CameraMediaResource) async -> UIImage? {
-        let key = resource.url.absoluteString
+    func loadPreview(_ item: CameraMediaItem) async -> UIImage? {
+        for resource in item.imagePreviewCandidates {
+            guard !Task.isCancelled else { return nil }
+            if let image = await load(resource, maximumPixelSize: 2048) { return image }
+        }
+        return nil
+    }
+
+    func load(_ resource: CameraMediaResource, maximumPixelSize: Int = 320) async -> UIImage? {
+        guard (1...2048).contains(maximumPixelSize) else { return nil }
+        let key = resource.url.absoluteString + "#\(maximumPixelSize)"
         if let image = cache.object(forKey: key as NSString) {
             order.removeAll { $0 == key }; order.append(key)
             return image
@@ -32,12 +41,12 @@ final class CameraThumbnailLoader: ObservableObject {
         let current = epoch
         do {
             if let size = resource.size, size > 4 * 1024 * 1024 {
-                await client.reportImageFailure(resource, reason: "图片超过缩略图传输上限")
+                await client.reportImageFailure(resource, reason: "图片超过预览传输上限")
                 return nil
             }
             let data = try await client.imageData(resource, maximumSize: 4 * 1024 * 1024)
             try Task.checkCancellation()
-            let image = await Task.detached(priority: .utility) { CameraImageDecode.image(data: data, maximumPixelSize: 320) }.value
+            let image = await Task.detached(priority: .utility) { CameraImageDecode.image(data: data, maximumPixelSize: maximumPixelSize) }.value
             try Task.checkCancellation()
             guard current == epoch else { return nil }
             guard let image, let cg = image.cgImage else {

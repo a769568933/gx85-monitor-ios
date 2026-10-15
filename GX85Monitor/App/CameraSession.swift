@@ -133,6 +133,7 @@ final class CameraSession: ObservableObject {
 
     var canCapture: Bool { controlReady && foreground && wantsConnection && !actionInProgress && !streamRestarting && !isBrowsing }
     var isActive: Bool { wantsConnection }
+    var connectionIdentity: UUID { epoch }
 
     func connect() {
         guard foreground else { return }
