@@ -331,15 +331,14 @@ final class CameraSession: ObservableObject {
                     try self.check(current)
                     self.applyControlState(await controls.latestState)
                     if initiatedStart, self.controlState.recordingState == .recording { self.recordingStartedUptime = self.clock() }
-                    if refreshRecordingOnly { self.notice = "已读取录像状态，请再次点击开始或停止；状态未确认时不会自动开始录像。" }
-                    else { self.notice = self.controlState.recordingState == .recording ? "相机已确认开始录像。" : "相机已确认停止录像。" }
+                    if refreshRecordingOnly { self.notice = self.controlState.recordingState == .unknown ? "无法确认录像状态，请检查相机后重试。" : nil }
+                    else { self.notice = nil }
                 } else {
                     let outcome = await controls.capturePhoto()
                     try self.check(current)
                     self.applyControlState(await controls.latestState)
                     switch outcome {
-                    case .confirmed: self.notice = "相机已确认生成新照片。"
-                    case .acceptedUnconfirmed: self.notice = "拍照指令已接受，拍摄结果待确认，请检查相机。"
+                    case .confirmed, .acceptedUnconfirmed: self.notice = nil
                     case .rejected(let reason): self.notice = "无法拍照：\(reason)"
                     case .unknown: self.notice = "拍摄结果未知，请检查相机。为避免重复拍摄，未自动重试。"
                     }
@@ -509,7 +508,7 @@ final class CameraSession: ObservableObject {
                 let snapshot = try await parameterService.load(lens: lens)
                 try self.check(current)
                 guard self.parameterRequest == request else { return }
-                self.parameterValues.merge(snapshot.values) { _, new in new }
+                self.parameterValues = snapshot.values
                 self.parameterOptions = snapshot.options
                 let warning = snapshot.warnings.joined(separator: "；")
                 if !warning.isEmpty, warning != self.lastParameterWarning {
@@ -535,6 +534,7 @@ final class CameraSession: ObservableObject {
         }
         parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
         actionInProgress = true; policy.captureStarted()
+        notice = nil
         let current = epoch
         captureTask = Task { [weak self] in
             guard let self else { return }
@@ -542,7 +542,8 @@ final class CameraSession: ObservableObject {
                 try await controls.setParameter(parameter, rawValue: allowed.rawValue)
                 try self.check(current)
                 self.parameterValues[parameter] = allowed.label
-                self.notice = "\(parameter.label)已由相机确认。"
+                self.diagnostics.append("\(parameter.label)已由相机回读确认：\(allowed.label)")
+                self.notice = nil
             } catch {
                 guard self.isCurrent(current), !Task.isCancelled else { return }
                 self.notice = error.localizedDescription
@@ -562,6 +563,7 @@ final class CameraSession: ObservableObject {
         let request = FocusRequest(point: point)
         focusRequest = request
         actionInProgress = true; policy.captureStarted()
+        notice = nil
         let current = epoch
         captureTask = Task { [weak self] in
             guard let self else { return }

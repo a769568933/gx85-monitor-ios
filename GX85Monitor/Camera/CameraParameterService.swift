@@ -50,7 +50,12 @@ actor CameraParameterService {
                 let reply = try await controls.sendExclusive(.getSetting(parameter.commandType))
                 try Task.checkCancellation()
                 if let raw = reply.fields[parameter.commandType] ?? reply.fields["value"], !raw.isEmpty {
-                    values[parameter] = all.options(for: parameter).first(where: { $0.rawValue == raw })?.label ?? parameter.displayValue(for: raw) ?? "—"
+                    if parameter != .iso, current.manualControlAllowed(for: parameter) == false {
+                        values[parameter] = "自动"
+                        warnings.append("\(parameter.label)由机身自动控制；不将保留的手动设置 \(raw.prefix(64)) 当作实时曝光。")
+                    } else {
+                        values[parameter] = all.options(for: parameter).first(where: { $0.rawValue == raw })?.label ?? parameter.displayValue(for: raw) ?? "—"
+                    }
                     if values[parameter] == "—" { warnings.append("无法换算\(parameter.label)返回值：\(String(raw.prefix(64)))") }
                 }
             } catch {

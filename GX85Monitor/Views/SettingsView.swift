@@ -41,7 +41,7 @@ struct SettingsView: View {
                     }
                 }
                 Section("关于") {
-                    Text("GX85 Monitor 0.2.2（build 4）")
+                    Text("GX85 Monitor 0.2.3（build 5）")
                     Text("照片和视频先保存在相机存储卡，可在相机相册选择原文件导出到 iPhone。无线画面的清晰度与流畅度由相机输出和当前网络共同决定。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }

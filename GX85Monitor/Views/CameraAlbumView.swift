@@ -27,7 +27,10 @@ struct CameraAlbumView: View {
                 if let error = model.errorMessage {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(error).font(.footnote).foregroundStyle(.yellow)
-                        Button("重新载入") { model.reload() }
+                        HStack(spacing: 20) {
+                            if model.canRetryPage { Button("重试本页") { model.loadNextPage() } }
+                            Button("重新载入") { model.reload() }
+                        }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(12)
                 }
                 if closing { Spacer(); ProgressView("返回监看中"); Spacer() }
@@ -58,7 +61,7 @@ struct CameraAlbumView: View {
                                     Text(item.title).font(.caption2).lineLimit(1)
                                     if !item.isContainer, item.originalResource == nil { Text("仅预览").font(.caption2).foregroundStyle(.secondary) }
                                 }
-                                .onAppear { if item.id == model.items.last?.id { model.loadNextPage() } }
+                                .onAppear { if model.hasMore && item.id == model.items.last?.id { model.loadNextPage() } }
                             }
                         }
                         .id(model.generation).padding(8)

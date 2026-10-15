@@ -23,12 +23,13 @@ final class CameraAlbumModel: ObservableObject {
         self.client = client; self.onClose = onClose
     }
     var hasMore: Bool { !isClosed && !paginationFailed && nextIndex != nil }
+    var canRetryPage: Bool { !isClosed && !isLoading && paginationFailed && nextIndex != nil }
     var selectedItems: [CameraMediaItem] { items.filter { selection.contains($0.id) } }
     var folderTitle: String { path.last?.title ?? "相机相册" }
 
     func loadNextPage() {
-        guard !isClosed, !isLoading, !paginationFailed, let start = nextIndex else { return }
-        isLoading = true
+        guard !isClosed, !isLoading, let start = nextIndex else { return }
+        isLoading = true; paginationFailed = false; errorMessage = nil
         let current = generation, objectID = path.last?.id ?? "0"
         loadTask = Task { [weak self] in
             guard let self else { return }
@@ -52,7 +53,10 @@ final class CameraAlbumModel: ObservableObject {
                 guard self.generation == current, !self.isClosed, !Task.isCancelled else { return }
                 self.errorMessage = error.localizedDescription
                 self.paginationFailed = true
-                self.nextIndex = nil
+                if error is AlbumError { self.nextIndex = nil }
+                else if let mediaError = error as? CameraMediaError {
+                    switch mediaError { case .directoryChanged, .noProgress: self.nextIndex = nil; default: break }
+                }
             }
             guard self.generation == current, !self.isClosed else { return }
             self.isLoading = false; self.loadTask = nil

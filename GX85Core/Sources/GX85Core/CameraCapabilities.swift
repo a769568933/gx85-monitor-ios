@@ -65,12 +65,15 @@ public struct CameraCapabilities: Equatable, Sendable {
     private let values: [ExposureParameter: [CameraParameterOption]]
     private let owners: [String: [String]]
     private let embeddedAperture: Bool
+    private let controlPermissions: [ExposureParameter: Bool]
     public let diagnostics: [String]
-    public init() { values = [:]; owners = [:]; diagnostics = []; embeddedAperture = false }
-    private init(values: [ExposureParameter: [CameraParameterOption]], diagnostics: [String], owners: [String: [String]] = [:], embeddedAperture: Bool = false) {
+    public init() { values = [:]; owners = [:]; diagnostics = []; embeddedAperture = false; controlPermissions = [:] }
+    private init(values: [ExposureParameter: [CameraParameterOption]], diagnostics: [String], owners: [String: [String]] = [:], embeddedAperture: Bool = false, controlPermissions: [ExposureParameter: Bool] = [:]) {
         self.values = values; self.diagnostics = diagnostics; self.owners = owners; self.embeddedAperture = embeddedAperture
+        self.controlPermissions = controlPermissions
     }
     public func options(for parameter: ExposureParameter) -> [CameraParameterOption] { values[parameter] ?? [] }
+    public func manualControlAllowed(for parameter: ExposureParameter) -> Bool? { controlPermissions[parameter] }
 
     public var requiresLensApertureLimits: Bool { embeddedAperture && values[.aperture]?.isEmpty != false }
 
@@ -98,7 +101,7 @@ public struct CameraCapabilities: Equatable, Sendable {
         }
         let messages = diagnostics.filter { !$0.hasPrefix("光圈未提供离散选项") && $0 != "菜单未提供可识别的曝光选项。" }
             + ["镜头光圈范围：\(opened)/256…\(closed)/256；可用性以当前菜单为准。"]
-        return CameraCapabilities(values: updated, diagnostics: messages, owners: updatedOwners, embeddedAperture: embeddedAperture)
+        return CameraCapabilities(values: updated, diagnostics: messages, owners: updatedOwners, embeddedAperture: embeddedAperture, controlPermissions: controlPermissions)
     }
 
     public static func supportsVGALiveView(menu data: Data) throws -> Bool {
@@ -135,9 +138,25 @@ public struct CameraCapabilities: Equatable, Sendable {
             if ["yes", "true", "1", "on"].contains(raw) { flags[id] = true }
             else if ["no", "false", "0", "off"].contains(raw) { flags[id] = false }
         }
+        var exposurePermissions: [ExposureParameter: Bool] = [:]
+        for (parameter, ids) in [(ExposureParameter.aperture, ["menu_item_id_aperture", "menu_item_id_f", "menu_item_id_f_and_ss"]),
+                                 (.shutter, ["menu_item_id_shutter_speed", "menu_item_id_ss", "menu_item_id_f_and_ss"])] {
+            let reported = ids.compactMap { flags[$0] }
+            if !reported.isEmpty { exposurePermissions[parameter] = reported.contains(true) }
+        }
         let updated = values.mapValues { options in
             options.map { option in
-                let permissions = (owners[option.id] ?? []).compactMap { flags[$0] }
+                let path = owners[option.id] ?? []
+                // Combined M control and individual A/S controls are alternatives.
+                // A disabled sibling does not veto an enabled combined route.
+                if let parameter = [ExposureParameter.aperture, .shutter].first(where: { option.id.hasPrefix($0.rawValue + ":") }),
+                   path.contains(parameter == .aperture ? "menu_item_id_aperture" : "menu_item_id_shutter_speed"),
+                   let permitted = exposurePermissions[parameter] {
+                    let ancestors = path.filter { !["menu_item_id_aperture", "menu_item_id_shutter_speed"].contains($0) }.compactMap { flags[$0] }
+                    return CameraParameterOption(id: option.id, label: option.label, rawValue: option.rawValue,
+                                                 enabled: option.enabled && permitted && !ancestors.contains(false))
+                }
+                let permissions = path.compactMap { flags[$0] }
                 return CameraParameterOption(id: option.id, label: option.label, rawValue: option.rawValue,
                                              enabled: option.enabled && permissions.contains(true) && !permissions.contains(false))
             }
@@ -146,7 +165,7 @@ public struct CameraCapabilities: Equatable, Sendable {
         let details = info.descendants.filter { interesting.contains($0.attributes["id"] ?? "") }.prefix(6).map { node in
             ["id", "enable", "value"].compactMap { key in node.attributes[key].map { "\(key)=\($0)" } }.joined(separator: ",")
         }
-        return CameraCapabilities(values: updated, diagnostics: diagnostics + details.map { "当前菜单：" + $0 }, owners: owners, embeddedAperture: embeddedAperture)
+        return CameraCapabilities(values: updated, diagnostics: diagnostics + details.map { "当前菜单：" + $0 }, owners: owners, embeddedAperture: embeddedAperture, controlPermissions: exposurePermissions)
     }
 
     public func disablingOptions(reason: String) -> CameraCapabilities {
@@ -201,8 +220,26 @@ public struct CameraCapabilities: Equatable, Sendable {
             diagnostics.append("\(parameter.label)未提供离散选项" + (details.isEmpty ? "。" : "：\(details)"))
         }
         let model = (menu.attributes["model"] ?? "").uppercased()
-        let embedded = ["GX80", "GX85", "DMC-GX80", "DMC-GX85"].contains(model)
+        let knownGX = ["GX80", "GX85", "DMC-GX80", "DMC-GX85"].contains(model)
+        let embedded = knownGX
             && menu.descendants.contains { $0.attributes["id"] == "menu_item_id_aperture" && $0.attributes["func_type"] == "sp_embeded_aperture" }
+        let embeddedShutter = knownGX && menu.descendants.contains {
+            ($0.attributes["id"] == "menu_item_id_shutter_speed" && $0.attributes["func_type"] == "sp_embeded_shutter_speed")
+            || ($0.attributes["id"] == "menu_item_id_f_and_ss" && $0.attributes["func_type"] == "sp_embeded_f_and_ss")
+        }
+        if embeddedShutter && values[.shutter]?.isEmpty != false {
+            // Known GX80/GX85 finite stop codes, not a range supplied by allmenu.
+            // Current shutter type may reject some stops; writes require readback.
+            // Bulb is excluded because the app has no timed shutter-hold control.
+            let stops: [(Int, String)] = [(-1536,"60s"),(-1450,"50s"),(-1365,"40s"),(-1280,"30s"),(-1194,"25s"),(-1109,"20s"),(-1024,"15s"),(-938,"13s"),(-853,"10s"),(-768,"8s"),(-682,"6s"),(-600,"5s"),(-512,"4s"),(-426,"3.2s"),(-341,"2.5s"),(-256,"2s"),(-170,"1.6s"),(-85,"1.3s"),(0,"1s"),(86,"1/1.3"),(171,"1/1.6"),(256,"1/2"),(342,"1/2.5"),(427,"1/3.2"),(512,"1/4"),(598,"1/5"),(683,"1/6"),(768,"1/8"),(854,"1/10"),(939,"1/13"),(1024,"1/15"),(1110,"1/20"),(1195,"1/25"),(1280,"1/30"),(1366,"1/40"),(1451,"1/50"),(1536,"1/60"),(1622,"1/80"),(1707,"1/100"),(1792,"1/125"),(1878,"1/160"),(1963,"1/200"),(2048,"1/250"),(2134,"1/320"),(2219,"1/400"),(2304,"1/500"),(2390,"1/640"),(2475,"1/800"),(2560,"1/1000"),(2646,"1/1300"),(2731,"1/1600"),(2816,"1/2000"),(2902,"1/2500"),(2987,"1/3200"),(3072,"1/4000"),(3158,"1/5000"),(3243,"1/6400"),(3328,"1/8000"),(3414,"1/10000"),(3499,"1/13000"),(3584,"1/16000")]
+            values[.shutter] = stops.map { code, label in
+                let raw = "\(code)/256", id = ExposureParameter.shutter.rawValue + ":" + raw
+                owners[id] = ["menu_item_id_shutter_speed"]
+                return CameraParameterOption(id: id, label: label, rawValue: raw, enabled: true)
+            }
+            diagnostics.removeAll { $0.hasPrefix("快门未提供离散选项") }
+            diagnostics.append("使用 GX80/GX85 标准有限快门档位；范围随快门类型而变，以机身回读确认为准。")
+        }
         return CameraCapabilities(values: values, diagnostics: diagnostics, owners: owners, embeddedAperture: embedded)
     }
 }

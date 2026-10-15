@@ -53,11 +53,40 @@ equivalence to a recorded full-resolution photo, the viewfinder or HDMI, and doe
 not add invented HD/4K modes. Confirm the available modes and delivered resolution
 on the user's camera after installation.
 
+## Exposure and interaction follow-up
+
+The user reports that M-mode shutter readings match the body, while automatic
+exposure modes differ and shutter choices are absent. The embedded menu declares
+controls without discrete stop values. M-mode's `menu_item_id_f_and_ss` can be
+enabled while the separate aperture/shutter entries are disabled: the combined
+control is an alternative route, not an ancestor whose siblings must also be on.
+
+For recognized GX80/GX85 embedded controls, populate finite standard shutter codes
+from the established Lumix stop table and retain lens-reported aperture limits.
+Enable either parameter when its individual or combined control is available.
+These are model-supported stop codes, not a range claimed to have been returned by
+the user's camera; current mechanical/electronic shutter restrictions can still
+reject a value. Exclude Bulb because this app has no timed hold interaction.
+Always read back writes and preserve the body's shooting mode and shutter type.
+
+When metadata says exposure is camera-controlled, display automatic instead of
+presenting the retained manual setting as live metered exposure. M-mode continues
+to show the setting readback; unknown metadata is not used to invent a live value.
+
+Replace long context menus with a scrollable sheet and full-width, minimum-48pt
+rows. Keep parameter selection taps out of the image focus gesture. The user's
+requested notification policy is quiet success: update readouts, record button and
+timer without a success banner. Accepted but unconfirmed photo acknowledgments
+remain in diagnostics without claiming a saved image. Rejection, transport failure
+and uncertain-operation errors remain visible.
+
 ## References
 
 - [Captured Lumix resource descriptors and HTTP live-view-size setting](https://github.com/gphoto/libgphoto2/blob/master/camlibs/lumix/lumix.c)
 - [GX80 owner's newest-first catalog reader](https://github.com/laurentmmeyer/lumix-gx80/blob/main/gx80_pull.py)
 - [Camera-owner Lumix menu capture with VGA/QVGA options](https://gist.github.com/auberginehill/132104749d2da304a48ebccb90571dfd)
+- [Lumix shutter stop codes](https://github.com/Rambalac/GMaster/blob/master/Core/Camera/CameraParser.cs)
+- [Camera-owner current-menu capture showing the combined exposure route](https://www.eoshd.com/comments/topic/24995-would-you-perhaps-be-interested-in-a-different-gx8085-colour-profile/page/3/)
 
 These references identify compatible protocol forms; they do not substitute for
 the user's missing failing SOAP response or physical GX85 validation.
