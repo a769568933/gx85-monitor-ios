@@ -22,7 +22,11 @@ struct CameraView: View {
                     }
                 } else if landscape {
                     HStack(spacing: 0) {
-                        VStack { status.padding(12); Spacer() }
+                        VStack(alignment: .leading, spacing: 8) {
+                            status
+                            CameraParameterBar(session: session).frame(maxWidth: 300)
+                            Spacer()
+                        }.padding(12)
                         Spacer(minLength: 0)
                         landscapeControls.frame(width: 104).background(.black.opacity(0.5))
                     }
@@ -34,6 +38,7 @@ struct CameraView: View {
                             iconButton("gearshape", label: "设置") { showSettings = true }
                         }
                         .padding(.leading, 18).padding(.trailing, 6).frame(height: 44)
+                        CameraParameterBar(session: session).padding(.horizontal, 12)
                         Spacer(minLength: 0)
                         portraitControls.frame(height: 160).background(.black.opacity(0.55))
                     }
@@ -80,7 +85,7 @@ struct CameraView: View {
     private var status: some View {
         HStack(spacing: 7) {
             Circle().fill(session.phase == .monitoring && !session.frameIsStale ? Color.green : Color.yellow).frame(width: 6, height: 6)
-            Text(session.controlState.recordingState == .recording ? "正在录像" : (session.frameIsStale ? "画面已暂停" : session.phase.title))
+            Text(session.controlState.recordingState == .recording ? "正在录像" : (session.selectedShootingMode == .video && session.controlState.recordingState == .unknown ? "录像状态未确认" : (session.frameIsStale ? "画面已暂停" : session.phase.title)))
                 .font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.85))
         }
         .accessibilityElement(children: .combine)

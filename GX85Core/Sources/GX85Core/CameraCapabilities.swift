@@ -25,12 +25,37 @@ public struct CameraParameterOption: Equatable, Identifiable, Sendable {
 
 public struct CameraCapabilities: Equatable, Sendable {
     private let values: [ExposureParameter: [CameraParameterOption]]
+    private let owners: [String: [String]]
     public let diagnostics: [String]
-    public init() { values = [:]; diagnostics = [] }
-    private init(values: [ExposureParameter: [CameraParameterOption]], diagnostics: [String]) {
-        self.values = values; self.diagnostics = diagnostics
+    public init() { values = [:]; owners = [:]; diagnostics = [] }
+    private init(values: [ExposureParameter: [CameraParameterOption]], diagnostics: [String], owners: [String: [String]] = [:]) {
+        self.values = values; self.diagnostics = diagnostics; self.owners = owners
     }
     public func options(for parameter: ExposureParameter) -> [CameraParameterOption] { values[parameter] ?? [] }
+
+    public func applyingCurrentMenu(data: Data) throws -> CameraCapabilities {
+        let root = try BoundedCameraXML.parse(data: data, maximumSize: 2 * 1024 * 1024)
+        guard root.name == "camrply", root.children.first(where: { $0.name == "result" })?.text == "ok",
+              let info = root.children.first(where: { $0.name == "menuinfo" }) else { throw ResponseError.malformed }
+        var flags: [String: Bool] = [:]
+        for node in info.descendants {
+            guard let id = node.attributes["id"], let raw = node.attributes["enable"]?.lowercased() else { continue }
+            if ["yes", "true", "1", "on"].contains(raw) { flags[id] = true }
+            else if ["no", "false", "0", "off"].contains(raw) { flags[id] = false }
+        }
+        let updated = values.mapValues { options in
+            options.map { option in
+                let permissions = (owners[option.id] ?? []).compactMap { flags[$0] }
+                return CameraParameterOption(id: option.id, label: option.label, rawValue: option.rawValue,
+                                             enabled: option.enabled && permissions.contains(true) && !permissions.contains(false))
+            }
+        }
+        return CameraCapabilities(values: updated, diagnostics: diagnostics, owners: owners)
+    }
+
+    public func disablingOptions(reason: String) -> CameraCapabilities {
+        CameraCapabilities(values: values.mapValues { $0.map { CameraParameterOption(id: $0.id, label: $0.label, rawValue: $0.rawValue, enabled: false) } }, diagnostics: diagnostics + [reason], owners: owners)
+    }
 
     public static func parse(data: Data) throws -> CameraCapabilities {
         let root = try BoundedCameraXML.parse(data: data, maximumSize: 2 * 1024 * 1024)
@@ -44,6 +69,14 @@ public struct CameraCapabilities: Equatable, Sendable {
             if let id = title.attributes["id"], !title.text.isEmpty { titles[id] = title.text }
         }
         var values: [ExposureParameter: [CameraParameterOption]] = [:]
+        var nodeOwners: [ObjectIdentifier: [String]] = [:]
+        func collectOwners(_ node: CameraXMLNode, path: [String]) {
+            let next = path + (node.attributes["id"].map { [$0] } ?? [])
+            nodeOwners[ObjectIdentifier(node)] = next
+            for child in node.children { collectOwners(child, path: next) }
+        }
+        collectOwners(menu, path: [])
+        var owners: [String: [String]] = [:]
         var seen = Set<String>()
         for node in menu.descendants where node.name == "item" {
             guard node.attributes["cmd_mode"] == "setsetting",
@@ -54,9 +87,10 @@ public struct CameraCapabilities: Equatable, Sendable {
             let titleID = node.attributes["title_id"] ?? ""
             let label = node.attributes["title"] ?? titles[titleID] ?? rawValue
             let enabled = !["no", "false", "0"].contains(node.attributes["enable"]?.lowercased() ?? "")
-            values[parameter, default: []].append(CameraParameterOption(id: node.attributes["id"] ?? key, label: label, rawValue: rawValue, enabled: enabled))
+            owners[key] = nodeOwners[ObjectIdentifier(node)] ?? []
+            values[parameter, default: []].append(CameraParameterOption(id: key, label: String(label.prefix(64)), rawValue: rawValue, enabled: enabled))
         }
-        return CameraCapabilities(values: values, diagnostics: values.isEmpty ? ["菜单未提供可识别的曝光选项。"] : [])
+        return CameraCapabilities(values: values, diagnostics: values.isEmpty ? ["菜单未提供可识别的曝光选项。"] : [], owners: owners)
     }
 }
 

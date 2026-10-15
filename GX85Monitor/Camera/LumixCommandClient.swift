@@ -52,7 +52,10 @@ actor LumixCommandClient: CommandSending {
             guard let http = response as? HTTPURLResponse else { throw ResponseError.malformed }
             guard (200..<300).contains(http.statusCode) else { throw CommandError.httpStatus(http.statusCode) }
             let parsed: LumixResponse
-            do { parsed = try LumixResponse.parse(data: data) }
+            do {
+                if case .getInfo = command { parsed = try LumixResponse.parseMenu(data: data) }
+                else { parsed = try LumixResponse.parse(data: data) }
+            }
             catch {
                 let summary = String(decoding: data.prefix(512), as: UTF8.self)
                 log("\(command.label)无法识别的回应：\(summary)")

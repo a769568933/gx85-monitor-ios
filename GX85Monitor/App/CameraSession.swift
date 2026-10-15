@@ -26,6 +26,8 @@ final class CameraSession: ObservableObject {
     @Published private(set) var actionInProgress = false
     @Published private(set) var controlState = CameraControlState(response: LumixResponse(status: .success))
     @Published private(set) var selectedShootingMode: CameraShootingMode = .photo
+    @Published private(set) var parameterOptions: [ExposureParameter: [CameraParameterOption]] = [:]
+    @Published private(set) var parameterValues: [ExposureParameter: String] = [:]
     @Published private(set) var frameIsStale = false
     @Published private(set) var notice: String?
     @Published private(set) var lastError: String?
@@ -48,6 +50,10 @@ final class CameraSession: ObservableObject {
     private let controlSleep: @Sendable (TimeInterval) async throws -> Void
     private var client: (any CommandSending)?
     private var controls: CameraControlService?
+    private var parameterService: CameraParameterService?
+    private var parameterTask: Task<Void, Never>?
+    private var parameterRequest = UUID()
+    private var lastParameterWarning: String?
     private var receiver: (any LiveViewReceiving)?
     private var connectionTask: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
@@ -149,6 +155,7 @@ final class CameraSession: ObservableObject {
     func selectShootingMode(_ mode: CameraShootingMode) {
         guard mode != .unknown, !actionInProgress, controlState.recordingState != .recording else { return }
         selectedShootingMode = mode
+        refreshParameters()
     }
 
     func capture() { performPrimaryAction() }
@@ -162,14 +169,17 @@ final class CameraSession: ObservableObject {
         let current = epoch
         let mode = selectedShootingMode
         let shouldStartRecording = controlState.recordingState != .recording
+        let refreshRecordingOnly = mode == .video && controlState.recordingState == .unknown
         captureTask = Task { [weak self] in
             guard let self else { return }
             do {
                 if mode == .video {
-                    _ = try await controls.setRecording(shouldStartRecording)
+                    if refreshRecordingOnly { _ = try await controls.readState() }
+                    else { _ = try await controls.setRecording(shouldStartRecording) }
                     try self.check(current)
                     self.applyControlState(await controls.latestState)
-                    self.notice = self.controlState.recordingState == .recording ? "相机已确认开始录像。" : "相机已确认停止录像。"
+                    if refreshRecordingOnly { self.notice = "已读取录像状态，请再次点击开始或停止；状态未确认时不会自动开始录像。" }
+                    else { self.notice = self.controlState.recordingState == .recording ? "相机已确认开始录像。" : "相机已确认停止录像。" }
                 } else {
                     let outcome = await controls.capturePhoto()
                     try self.check(current)
@@ -266,6 +276,7 @@ final class CameraSession: ObservableObject {
                 self.diagnostics.append(message)
             }
         })
+        if let controls { parameterService = CameraParameterService(controls: controls) }
         var id = settings.accessID.trimmingCharacters(in: .whitespacesAndNewlines)
         if id.isEmpty {
             if let discovered = await CameraIdentityResolver.resolve(endpoint: endpoint) {
@@ -305,6 +316,7 @@ final class CameraSession: ObservableObject {
         lastError = nil
         UIApplication.shared.isIdleTimerDisabled = true
         diagnostics.append("控制连接就绪，等待有效画面")
+        refreshParameters()
     }
 
     private func sendSuccess(_ command: LumixCommand, via client: any CommandSending, current: UUID) async throws {
@@ -322,8 +334,67 @@ final class CameraSession: ObservableObject {
     }
 
     private func applyControlState(_ state: CameraControlState) {
+        if let lens = state.rawFields["lens"], lens != controlState.rawFields["lens"] {
+            parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
+            parameterOptions = [:]; parameterValues = [:]
+        }
         controlState = state
         if state.shootingMode != .unknown { selectedShootingMode = state.shootingMode }
+    }
+
+    private func refreshParameters() {
+        guard controlReady, foreground, wantsConnection, !actionInProgress, parameterTask == nil, let parameterService else { return }
+        let current = epoch, request = UUID(), lens = controlState.rawFields["lens"]
+        parameterRequest = request
+        parameterTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let snapshot = try await parameterService.load(lens: lens)
+                try self.check(current)
+                guard self.parameterRequest == request else { return }
+                self.parameterValues.merge(snapshot.values) { _, new in new }
+                self.parameterOptions = snapshot.options
+                let warning = snapshot.warnings.joined(separator: "；")
+                if !warning.isEmpty, warning != self.lastParameterWarning { self.diagnostics.append(warning) }
+                self.lastParameterWarning = warning
+            } catch {
+                guard self.isCurrent(current), !Task.isCancelled, self.parameterRequest == request else { return }
+                let warning = "读取曝光参数：\(error.localizedDescription)"
+                if warning != self.lastParameterWarning { self.diagnostics.append(warning) }
+                self.lastParameterWarning = warning
+            }
+            guard self.parameterRequest == request else { return }
+            self.parameterTask = nil
+        }
+    }
+
+    func updateParameter(_ parameter: ExposureParameter, option: CameraParameterOption) {
+        guard canCapture, let controls else { return }
+        guard let allowed = parameterOptions[parameter]?.first(where: { $0.id == option.id && $0.rawValue == option.rawValue }), allowed.enabled else {
+            notice = "该参数由相机控制，或当前模式没有提供可调范围。"
+            return
+        }
+        parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
+        actionInProgress = true; policy.captureStarted()
+        let current = epoch
+        captureTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await controls.setParameter(parameter, rawValue: allowed.rawValue)
+                try self.check(current)
+                self.parameterValues[parameter] = allowed.label
+                self.notice = "\(parameter.label)已由相机确认。"
+            } catch {
+                guard self.isCurrent(current), !Task.isCancelled else { return }
+                self.notice = error.localizedDescription
+                self.diagnostics.append("\(parameter.label)设置：\(error.localizedDescription)")
+            }
+            guard self.isCurrent(current) else { return }
+            self.actionInProgress = false; self.captureTask = nil
+            self.policy.captureFinished(now: self.clock())
+            if self.deferredRecovery { self.deferredRecovery = false; self.recover() }
+            else { self.refreshParameters() }
+        }
     }
 
     private func startMonitor(_ current: UUID) {
@@ -348,6 +419,7 @@ final class CameraSession: ObservableObject {
                     if self.policy.recordHealth(succeeded: healthy) == .reconnect {
                         self.recover(); return
                     }
+                    if healthy { self.refreshParameters() }
                 }
                 switch self.policy.evaluate(now: self.clock()) {
                 case .restartStream:
@@ -372,7 +444,7 @@ final class CameraSession: ObservableObject {
 
     private func recover() {
         guard wantsConnection, foreground else { return }
-        if isCapturing {
+        if actionInProgress {
             deferredRecovery = true
             return
         }
@@ -434,6 +506,9 @@ final class CameraSession: ObservableObject {
         receiver = nil
         client = nil
         controls = nil
+        parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
+        parameterService = nil
+        parameterOptions = [:]; parameterValues = [:]; lastParameterWarning = nil
         controlState = CameraControlState(response: LumixResponse(status: .success))
         generation = UUID()
         decoder.reset(generation: generation)

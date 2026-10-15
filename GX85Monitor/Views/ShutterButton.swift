@@ -25,7 +25,7 @@ struct ShutterButton: View {
         }
         .buttonStyle(.plain)
         .disabled(!enabled)
-        .accessibilityLabel(busy ? "等待相机确认" : (mode == .video ? (recordingState == .recording ? "停止录像" : "开始录像") : "拍照"))
+        .accessibilityLabel(busy ? "等待相机确认" : (mode == .video ? (recordingState == .recording ? "停止录像" : (recordingState == .unknown ? "确认录像状态" : "开始录像")) : "拍照"))
         .accessibilityIdentifier("primaryShutter")
         .accessibilityHint("媒体保存在 GX85 存储卡")
     }
