@@ -5,6 +5,21 @@ import GX85Core
 @testable import GX85Monitor
 
 final class PhotoLibraryWriterTests: XCTestCase {
+    func testCancelDuringAuthorizationNeverStartsPhotoWrite() async throws {
+        let authorization = HeldPhotoAuthorization()
+        let calls = PhotoWriteCalls()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".JPG")
+        try Data([1]).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let writer = PhotoLibraryWriter(authorize: { await authorization.request() }, write: { _, kind in await calls.append(kind) })
+        let task = Task { try await writer.save(fileURL: url, kind: .photo) }
+        for _ in 0..<200 { if (await authorization.waiting) { break }; try await Task.sleep(nanoseconds: 5_000_000) }
+        task.cancel()
+        await authorization.allow()
+        do { try await task.value; XCTFail("Canceled authorization must not submit a write") } catch { }
+        let writes = await calls.values
+        XCTAssertTrue(writes.isEmpty)
+    }
     func testDeniedAndRestrictedNeverSubmitAsset() async throws {
         let calls = PhotoWriteCalls()
         for status in [PHAuthorizationStatus.denied, .restricted] {
@@ -33,6 +48,15 @@ final class PhotoLibraryWriterTests: XCTestCase {
 private actor PhotoWriteCalls {
     var values: [CameraMediaKind] = []
     func append(_ value: CameraMediaKind) { values.append(value) }
+}
+private actor HeldPhotoAuthorization {
+    var waiting = false
+    private var continuation: CheckedContinuation<PHAuthorizationStatus, Never>?
+    func request() async -> PHAuthorizationStatus {
+        waiting = true
+        return await withCheckedContinuation { continuation = $0 }
+    }
+    func allow() { continuation?.resume(returning: .authorized); continuation = nil }
 }
 
 @MainActor

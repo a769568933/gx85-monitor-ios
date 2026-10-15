@@ -18,6 +18,18 @@ final class CameraPresentationUITests: XCTestCase {
         attachment.lifetime = .keepAlways
         add(attachment)
     }
+    private func assertTestCardAtScreenshotCenter(_ screenshot: XCUIScreenshot) {
+        guard let image = screenshot.image.cgImage,
+              let pixel = image.cropping(to: CGRect(x: image.width / 2, y: image.height / 2, width: 1, height: 1)) else { XCTFail("Missing screenshot pixels"); return }
+        var rgba = [UInt8](repeating: 0, count: 4)
+        rgba.withUnsafeMutableBytes { buffer in
+            let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+            context?.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        }
+        XCTAssertEqual(Int(rgba[0]), 235, accuracy: 20, "Screenshot must contain the orange test target at screen center")
+        XCTAssertEqual(Int(rgba[1]), 153, accuracy: 20)
+        XCTAssertEqual(Int(rgba[2]), 61, accuracy: 20)
+    }
     func testPortraitAndBothLandscapesStayCentered() {
         let app = launch()
         defer { XCUIDevice.shared.orientation = .portrait }
@@ -30,6 +42,7 @@ final class CameraPresentationUITests: XCTestCase {
             }
             expectation(for: centered, evaluatedWith: image)
             waitForExpectations(timeout: 5)
+            assertTestCardAtScreenshotCenter(app.screenshot())
             attach(app, name)
         }
     }
@@ -55,6 +68,7 @@ final class CameraPresentationUITests: XCTestCase {
         let confirmed = NSPredicate(format: "label == %@", "停止录像")
         expectation(for: confirmed, evaluatedWith: app.buttons["primaryShutter"])
         waitForExpectations(timeout: 4)
+        XCTAssertTrue(app.staticTexts["recordingTimer"].waitForExistence(timeout: 3), "Confirmed recording needs an elapsed-time overlay")
         attach(app, "portrait-recording")
         app.buttons["primaryShutter"].tap()
         let stopped = NSPredicate(format: "label == %@", "开始录像")
