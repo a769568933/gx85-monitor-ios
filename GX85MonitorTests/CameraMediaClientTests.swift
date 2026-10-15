@@ -20,7 +20,7 @@ final class CameraMediaClientTests: XCTestCase {
     }
 
     func testFallbackBrowseUsesSOAPAndSameCameraEndpoint() async throws {
-        MediaStubProtocol.set { _ in Self.emptyPage }
+        MediaStubProtocol.set({ _ in Self.emptyPage })
         let camera = try client()
         let page = try await camera.browse(start: 0, count: 40)
         XCTAssertTrue(page.items.isEmpty)
@@ -35,11 +35,30 @@ final class CameraMediaClientTests: XCTestCase {
     }
 
     func testInvalidPageRequestNeverMakesHTTPCall() async throws {
-        MediaStubProtocol.set { _ in Self.emptyPage }
+        MediaStubProtocol.set({ _ in Self.emptyPage })
         let camera = try client()
         do { _ = try await camera.browse(start: -1, count: 40); XCTFail("Negative start must reject") } catch { }
         do { _ = try await camera.browse(start: 0, count: 41); XCTFail("Overlarge page must reject") } catch { }
         XCTAssertTrue(MediaStubProtocol.requests.isEmpty)
+    }
+
+    func testAtMostThreeImageRequestsRunWhileFourthWaits() async throws {
+        let firstThree = expectation(description: "Three image transfers")
+        firstThree.expectedFulfillmentCount = 3
+        let unexpectedFourth = expectation(description: "Fourth request must wait")
+        unexpectedFourth.isInverted = true
+        MediaStubProtocol.set({ _ in Data([7]) }, held: true, onStart: { count in
+            if count <= 3 { firstThree.fulfill() } else { unexpectedFourth.fulfill() }
+        })
+        let camera = try client()
+        let resource = CameraMediaResource(url: URL(string: "http://192.168.54.1/thumb.JPG")!, mimeType: "image/jpeg", role: .thumbnail)
+        let tasks = (0..<4).map { _ in Task { try await camera.imageData(resource) } }
+        await fulfillment(of: [firstThree], timeout: 2)
+        await fulfillment(of: [unexpectedFourth], timeout: 0.3)
+        XCTAssertEqual(MediaStubProtocol.requests.count, 3)
+        MediaStubProtocol.releaseAll()
+        for task in tasks { let data = try await task.value; XCTAssertEqual(data, Data([7])) }
+        XCTAssertEqual(MediaStubProtocol.requests.count, 4)
     }
 
     func testRedirectGuardRejectsCredentialedSameHostURL() throws {
@@ -71,9 +90,19 @@ private final class MediaStubProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private static var handler: (@Sendable (URLRequest) -> Data)?
     private static var recorded: [URLRequest] = []
+    private static var held = false
+    private static var pending: [MediaStubProtocol] = []
+    private static var onStart: (@Sendable (Int) -> Void)?
+    private var receivedRequest: URLRequest?
     static var requests: [URLRequest] { lock.withLock { recorded } }
-    static func set(_ value: @escaping @Sendable (URLRequest) -> Data) { lock.withLock { handler = value; recorded = [] } }
-    static func reset() { lock.withLock { handler = nil; recorded = [] } }
+    static func set(_ value: @escaping @Sendable (URLRequest) -> Data, held: Bool = false, onStart: (@Sendable (Int) -> Void)? = nil) {
+        lock.withLock { handler = value; recorded = []; self.held = held; pending = []; self.onStart = onStart }
+    }
+    static func releaseAll() {
+        let waiting = lock.withLock { () -> [MediaStubProtocol] in held = false; onStart = nil; let values = pending; pending = []; return values }
+        for value in waiting { value.respond() }
+    }
+    static func reset() { releaseAll(); lock.withLock { handler = nil; recorded = [] } }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -89,8 +118,18 @@ private final class MediaStubProtocol: URLProtocol, @unchecked Sendable {
             stream.close()
             received.httpBody = body
         }
-        let reply = Self.lock.withLock { () -> (@Sendable (URLRequest) -> Data)? in Self.recorded.append(received); return Self.handler }
-        let data = reply?(received) ?? Data()
+        receivedRequest = received
+        let (hold, count, callback) = Self.lock.withLock { () -> (Bool, Int, (@Sendable (Int) -> Void)?) in
+            Self.recorded.append(received)
+            if Self.held { Self.pending.append(self) }
+            return (Self.held, Self.recorded.count, Self.onStart)
+        }
+        callback?(count)
+        if !hold { respond() }
+    }
+    private func respond() {
+        let reply = Self.lock.withLock { Self.handler }
+        let data = reply?(receivedRequest ?? request) ?? Data()
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Length": String(data.count)])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)

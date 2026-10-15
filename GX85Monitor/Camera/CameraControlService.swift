@@ -143,6 +143,7 @@ actor CameraControlService {
         try await transaction {
             var state = try await self.readStateUnlocked()
             // A physical camera operation has priority over the album's previous state.
+            guard state.recordingState != .unknown else { throw CameraControlError.unconfirmed }
             if state.recordingState != .recording {
                 _ = try await self.send(.recordMode)
                 state = try await self.readStateUnlocked()

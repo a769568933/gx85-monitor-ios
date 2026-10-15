@@ -225,6 +225,7 @@ final class CameraSession: ObservableObject {
     }
 
     func endPlayback(owner: UUID? = nil, noticeAfter: String? = nil) async {
+        if let owner, playbackID != owner { return }
         guard isBrowsing else { return }
         isBrowsing = false
         playbackID = nil
@@ -436,7 +437,7 @@ final class CameraSession: ObservableObject {
         }
         guard permitted else { throw CommandError.waitingApproval }
         try await sendSuccess(.state, via: commandClient, current: current)
-        if controlState.recordingState != .recording { try await sendSuccess(.recordMode, via: commandClient, current: current) }
+        if controlState.recordingState == .stopped { try await sendSuccess(.recordMode, via: commandClient, current: current) }
         let liveReceiver = makeReceiver()
         receiver = liveReceiver
         let decoder = self.decoder
