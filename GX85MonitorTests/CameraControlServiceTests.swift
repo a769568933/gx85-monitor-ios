@@ -4,6 +4,22 @@ import GX85Core
 @testable import GX85Monitor
 
 final class CameraControlServiceTests: XCTestCase {
+    func testTapFocusPreservesMFAndNeverTriggersCapture() async {
+        let camera = ControlCamera(.ackOnly)
+        do { try await service(camera).focus(at: CGPoint(x: 0.5, y: 0.5)); XCTFail("MF must not request touch autofocus") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.capture))
+        XCTAssertFalse(calls.contains(.touchFocus(x: 500, y: 500)))
+    }
+
+    func testTapAutofocusSendsPositionWithoutTouchShutter() async throws {
+        let camera = ControlCamera(.autoFocus)
+        try await service(camera).focus(at: CGPoint(x: 0.25, y: 0.75))
+        let calls = await camera.calls
+        XCTAssertTrue(calls.contains(.touchFocus(x: 250, y: 750)))
+        XCTAssertFalse(calls.contains(.capture))
+    }
     private func service(_ camera: ControlCamera) -> CameraControlService {
         CameraControlService(client: camera, sleep: { _ in try Task.checkCancellation(); await Task.yield() })
     }
