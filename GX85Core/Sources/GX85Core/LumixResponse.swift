@@ -46,8 +46,10 @@ public struct LumixResponse: Equatable, Sendable {
             result = value
             fields = delegate.fields
         } else {
-            result = String(text.split(separator: ",", omittingEmptySubsequences: false)[0])
+            let tokens = text.split(separator: ",", omittingEmptySubsequences: false)
+            result = String(tokens[0])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            if tokens.count == 2 { fields["value"] = String(tokens[1]).trimmingCharacters(in: .whitespacesAndNewlines) }
         }
         let token = result.lowercased()
         let status: Status
@@ -74,6 +76,11 @@ private final class ReplyXMLParser: NSObject, XMLParserDelegate {
         if root == nil { root = elementName.lowercased() }
         path.append(elementName.lowercased())
         textStack.append("")
+        if path == ["camrply", "settingvalue"] {
+            for name in ["focusmode", "focal", "shtrspeed", "iso"] {
+                if let value = attributeDict[name] { fields[name] = value }
+            }
+        }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {

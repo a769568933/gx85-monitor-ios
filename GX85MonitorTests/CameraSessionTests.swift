@@ -10,7 +10,7 @@ final class CameraSessionTests: XCTestCase {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let settings = CameraSettings(defaults: defaults)
         settings.accessID = "test-camera-uuid"
-        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { 0 }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) })
+        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { 0 }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() })
     }
 
     private func waitUntil(_ predicate: () -> Bool) async {
@@ -65,6 +65,37 @@ final class CameraSessionTests: XCTestCase {
         let count = await commands.captureCount
         XCTAssertEqual(count, 1)
         XCTAssertTrue(session.notice?.contains("结果未知") == true)
+        session.disconnect()
+    }
+
+    func testAcceptedCaptureDoesNotClaimSavedPhoto() async {
+        let session = makeSession(TestCommands())
+        session.connect()
+        await waitUntil { session.canCapture }
+        session.capture()
+        await waitUntil { !session.isCapturing && session.notice != nil }
+        XCTAssertFalse(session.notice?.contains("照片保存在") == true)
+        XCTAssertTrue(session.notice?.contains("待确认") == true)
+        session.disconnect()
+    }
+
+    func testVideoSelectionUsesVideoStartAndBackgroundDoesNotStopRecording() async {
+        let commands = TestCommands()
+        let session = makeSession(commands)
+        session.connect()
+        await waitUntil { session.canCapture }
+        session.selectShootingMode(.video)
+        session.performPrimaryAction()
+        await waitUntil { !session.actionInProgress && session.controlState.recordingState == .recording }
+        let photos = await commands.captureCount
+        let starts = await commands.videoStartCount
+        XCTAssertEqual(photos, 0)
+        XCTAssertEqual(starts, 1)
+        session.setForeground(false)
+        for _ in 0..<20 { await Task.yield() }
+        let stops = await commands.videoStopCount
+        XCTAssertEqual(stops, 0)
+        XCTAssertEqual(session.controlState.recordingState, .unknown)
         session.disconnect()
     }
 
@@ -160,6 +191,9 @@ final class CameraSessionTests: XCTestCase {
 
 private actor TestCommands: CommandSending {
     var captureCount = 0
+    var videoStartCount = 0
+    var videoStopCount = 0
+    private var recording = false
     var accessWaiting = false
     var healthWaiting = false
     var healthCount = 0
@@ -180,6 +214,8 @@ private actor TestCommands: CommandSending {
     func holdFailingHealth() { holdHealth = true }
     func releaseFailingHealth() { holdHealth = false; healthContinuation?.resume(); healthContinuation = nil }
     func send(_ command: LumixCommand) async throws -> LumixResponse {
+        if command == .videoStart { videoStartCount += 1; recording = true }
+        if command == .videoStop { videoStopCount += 1; recording = false }
         if command == .state {
             healthCount += 1
             if holdHealth {
@@ -198,7 +234,7 @@ private actor TestCommands: CommandSending {
             if captureHeld { await withCheckedContinuation { captureContinuation = $0 } }
             if let captureError { throw captureError }
         }
-        return LumixResponse(status: .success, summary: "ok")
+        return LumixResponse(status: .success, fields: ["rec": recording ? "on" : "off", "focusmode": "mf"], summary: "ok")
     }
 }
 
