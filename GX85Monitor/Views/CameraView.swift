@@ -14,39 +14,11 @@ struct CameraView: View {
         GeometryReader { geometry in
             let landscape = geometry.size.width > geometry.size.height
             ZStack {
-                preview.ignoresSafeArea()
-                if fullscreen {
-                    VStack {
-                        HStack {
-                            Spacer()
-                            iconButton("arrow.down.right.and.arrow.up.left", label: "退出全屏监看") { fullscreen = false }
-                                .background(.black.opacity(0.55), in: Circle()).padding(8)
-                        }
-                        Spacer()
-                    }
-                } else if landscape {
-                    HStack(spacing: 0) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            status
-                            CameraParameterBar(session: session).frame(maxWidth: 300)
-                            Spacer()
-                        }.padding(12)
-                        Spacer(minLength: 0)
-                        landscapeControls.frame(width: 104).background(.black.opacity(0.5))
-                    }
+                if session.image == nil {
+                    connectionScreen
                 } else {
-                    VStack(spacing: 0) {
-                        HStack {
-                            status
-                            Spacer()
-                            connectionButton
-                            iconButton("gearshape", label: "设置") { showSettings = true }
-                        }
-                        .padding(.leading, 18).padding(.trailing, 6).frame(height: 44)
-                        CameraParameterBar(session: session).padding(.horizontal, 12)
-                        Spacer(minLength: 0)
-                        portraitControls.frame(height: 160).background(.black.opacity(0.55))
-                    }
+                    preview.ignoresSafeArea()
+                    monitoringControls(landscape: landscape)
                 }
                 if let message = session.notice {
                     VStack {
@@ -54,7 +26,7 @@ struct CameraView: View {
                         NoticeOverlay(message: message, onDismiss: session.clearNotice)
                             .frame(maxWidth: 560)
                             .padding(.horizontal, landscape ? 108 : 12)
-                            .padding(.bottom, fullscreen ? 12 : (landscape ? 12 : 168))
+                            .padding(.bottom, session.image == nil || fullscreen ? 12 : (landscape ? 12 : 168))
                     }
                 }
                 if openingAlbum {
@@ -74,6 +46,65 @@ struct CameraView: View {
             if let albumModel, let mediaClient { CameraAlbumView(model: albumModel, client: mediaClient) }
         }
         .onChange(of: session.isBrowsing) { browsing in if !browsing { showAlbum = false } }
+    }
+
+    private var connectionScreen: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Spacer(minLength: 0)
+                if session.isActive { connectionButton }
+                iconButton("gearshape", label: "设置") { showSettings = true }
+            }
+            .padding(.horizontal, 12).frame(height: 44)
+            ConnectionGuideView(phase: session.phase, error: session.lastError, connect: session.connect)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            // A missing video frame must not remove control of an active recording.
+            if session.controlState.recordingState == .recording {
+                HStack {
+                    status
+                    Spacer()
+                    shutter
+                }.padding(.horizontal, 24).padding(.vertical, 12)
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+    }
+
+    @ViewBuilder
+    private func monitoringControls(landscape: Bool) -> some View {
+        if fullscreen {
+            VStack {
+                HStack {
+                    Spacer()
+                    iconButton("arrow.down.right.and.arrow.up.left", label: "退出全屏监看") { fullscreen = false }
+                        .background(.black.opacity(0.55), in: Circle()).padding(8)
+                }
+                Spacer()
+            }
+        } else if landscape {
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 8) {
+                    status
+                    CameraParameterBar(session: session).frame(maxWidth: 300)
+                    Spacer()
+                }.padding(12)
+                Spacer(minLength: 0)
+                landscapeControls.frame(width: 104).background(.black.opacity(0.5))
+            }
+        } else {
+            VStack(spacing: 0) {
+                HStack {
+                    status
+                    Spacer()
+                    connectionButton
+                    iconButton("gearshape", label: "设置") { showSettings = true }
+                }
+                .padding(.leading, 18).padding(.trailing, 6).frame(height: 44)
+                CameraParameterBar(session: session).padding(.horizontal, 12)
+                Spacer(minLength: 0)
+                portraitControls.frame(height: 160).background(.black.opacity(0.55))
+            }
+        }
     }
 
     private var preview: some View {
@@ -101,8 +132,6 @@ struct CameraView: View {
                             .font(.callout.weight(.medium)).foregroundStyle(.yellow)
                             .padding(12).background(.black.opacity(0.75), in: Capsule())
                     }
-                } else {
-                    ConnectionGuideView(phase: session.phase, error: session.lastError, connect: session.connect)
                 }
             }
             .contentShape(Rectangle())

@@ -174,6 +174,7 @@ private final class FixtureReceiver: LiveViewReceiving {
     private var stopped = false
     init(frame: Data) { self.frame = frame }
     func start(endpoint: CameraEndpoint, onDatagram: @escaping @Sendable (Data) -> Void) async throws {
+        if ProcessInfo.processInfo.arguments.contains("--fixture-no-frame") { return }
         try lock.withLock {
             guard !stopped else { throw CancellationError() }
             let frame = self.frame

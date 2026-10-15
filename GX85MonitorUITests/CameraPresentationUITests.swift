@@ -62,6 +62,22 @@ final class CameraPresentationUITests: XCTestCase {
         app.buttons["完成"].tap()
         XCTAssertTrue(app.staticTexts["连接你的 GX85"].waitForExistence(timeout: 3))
     }
+    func testRecordingCanStillBeStoppedWhileWaitingForFirstFrame() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["--fixture-monitor", "--fixture-recording", "--fixture-no-frame"]
+        app.launch()
+        XCTAssertFalse(app.images["livePreview"].exists)
+        let stop = app.buttons["primaryShutter"]
+        XCTAssertTrue(stop.waitForExistence(timeout: 8))
+        XCTAssertEqual(stop.label, "停止录像")
+        XCTAssertTrue(stop.isEnabled)
+        stop.tap()
+        expectation(for: NSPredicate { _, _ in !app.buttons["primaryShutter"].exists }, evaluatedWith: app)
+        waitForExpectations(timeout: 5)
+        XCTAssertTrue(app.staticTexts["等待画面"].exists)
+        attach(app, "connection-awaiting-first-frame")
+    }
     func testPortraitAndBothLandscapesStayCentered() {
         let app = launch()
         defer { XCUIDevice.shared.orientation = .portrait }
