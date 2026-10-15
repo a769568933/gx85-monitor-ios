@@ -13,7 +13,7 @@ final class CameraPresentationUITests: XCTestCase {
         return app
     }
     private func attach(_ app: XCUIApplication, _ name: String) {
-        let attachment = XCTAttachment(screenshot: app.screenshot())
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = "SIMULATION-" + name
         attachment.lifetime = .keepAlways
         add(attachment)
@@ -38,11 +38,15 @@ final class CameraPresentationUITests: XCTestCase {
             let image = app.images["livePreview"]
             let window = app.windows.firstMatch
             let centered = NSPredicate { _, _ in
-                abs(image.frame.midX - window.frame.midX) <= 2 && abs(image.frame.midY - window.frame.midY) <= 2
+                let targetShape = orientation == .portrait ? window.frame.height > window.frame.width : window.frame.width > window.frame.height
+                return targetShape && abs(image.frame.midX - window.frame.midX) <= 2 && abs(image.frame.midY - window.frame.midY) <= 2
             }
             expectation(for: centered, evaluatedWith: image)
             waitForExpectations(timeout: 5)
-            assertTestCardAtScreenshotCenter(app.screenshot())
+            let settledFrame = image.frame
+            Thread.sleep(forTimeInterval: 0.8)
+            XCTAssertEqual(image.frame, settledFrame, "Rotation must finish before capture")
+            assertTestCardAtScreenshotCenter(XCUIScreen.main.screenshot())
             attach(app, name)
         }
     }
@@ -52,6 +56,7 @@ final class CameraPresentationUITests: XCTestCase {
         defer { XCUIDevice.shared.orientation = .portrait }
         expectation(for: NSPredicate { _, _ in app.windows.firstMatch.frame.width > app.windows.firstMatch.frame.height }, evaluatedWith: app.windows.firstMatch)
         waitForExpectations(timeout: 5)
+        Thread.sleep(forTimeInterval: 0.8)
         let image = app.images["livePreview"]
         let before = image.frame
         app.buttons["fixtureNotice"].tap()

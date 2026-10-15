@@ -19,6 +19,7 @@ enum CameraControlError: LocalizedError {
 /// Owns the entire transaction, including awaits; the HTTP client's gate alone
 /// cannot prevent a health request from splitting press and release.
 actor CameraControlService {
+    private(set) var lastRecordingMutationSent = false
     private let client: any CommandSending
     private let gate = ControlTransactionGate()
     private let sleep: @Sendable (TimeInterval) async throws -> Void
@@ -93,6 +94,7 @@ actor CameraControlService {
 
     func setRecording(_ active: Bool) async throws -> CameraRecordingState {
         try await transaction {
+            self.lastRecordingMutationSent = false
             let before = try await self.readStateUnlocked()
             let desired: CameraRecordingState = active ? .recording : .stopped
             if before.recordingState == desired { return desired }
@@ -100,6 +102,7 @@ actor CameraControlService {
             if active, before.isBusy == true { throw CameraControlError.unavailable("相机正在忙，请稍后再录像。") }
             do {
                 _ = try await self.send(active ? .videoStart : .videoStop)
+                self.lastRecordingMutationSent = true
                 let deadline = ProcessInfo.processInfo.systemUptime + 4
                 for _ in 0..<20 {
                     guard ProcessInfo.processInfo.systemUptime < deadline else { break }

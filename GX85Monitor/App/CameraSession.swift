@@ -31,6 +31,19 @@ final class CameraSession: ObservableObject {
     @Published private(set) var actionInProgress = false
     @Published private(set) var controlState = CameraControlState(response: LumixResponse(status: .success))
     @Published private(set) var selectedShootingMode: CameraShootingMode = .photo
+    @Published private var recordingStartedUptime: TimeInterval?
+    var recordingElapsed: TimeInterval? {
+        guard controlState.recordingState == .recording, let start = recordingStartedUptime else { return nil }
+        let elapsed = clock() - start
+        return elapsed.isFinite ? max(0, elapsed) : nil
+    }
+    var recordingTimerText: String {
+        guard let elapsed = recordingElapsed else { return "时长未知" }
+        let seconds = Int(min(elapsed, Double(Int.max / 2)))
+        func two(_ value: Int) -> String { value < 10 ? "0\(value)" : "\(value)" }
+        if seconds >= 3600 { return "\(two(seconds / 3600)):\(two(seconds / 60 % 60)):\(two(seconds % 60))" }
+        return "\(two(seconds / 60)):\(two(seconds % 60))"
+    }
     @Published private(set) var parameterOptions: [ExposureParameter: [CameraParameterOption]] = [:]
     @Published private(set) var parameterValues: [ExposureParameter: String] = [:]
     @Published private(set) var focusRequest: FocusRequest?
@@ -308,10 +321,16 @@ final class CameraSession: ObservableObject {
             guard let self else { return }
             do {
                 if mode == .video {
+                    var initiatedStart = false
                     if refreshRecordingOnly { _ = try await controls.readState() }
-                    else { _ = try await controls.setRecording(shouldStartRecording) }
+                    else {
+                        _ = try await controls.setRecording(shouldStartRecording)
+                        let sent = await controls.lastRecordingMutationSent
+                        initiatedStart = shouldStartRecording && sent
+                    }
                     try self.check(current)
                     self.applyControlState(await controls.latestState)
+                    if initiatedStart, self.controlState.recordingState == .recording { self.recordingStartedUptime = self.clock() }
                     if refreshRecordingOnly { self.notice = "已读取录像状态，请再次点击开始或停止；状态未确认时不会自动开始录像。" }
                     else { self.notice = self.controlState.recordingState == .recording ? "相机已确认开始录像。" : "相机已确认停止录像。" }
                 } else {
@@ -329,6 +348,7 @@ final class CameraSession: ObservableObject {
             } catch {
                 guard self.isCurrent(current) else { return }
                 self.controlState = CameraControlState(response: LumixResponse(status: .success))
+                self.recordingStartedUptime = nil
                 self.notice = error.localizedDescription
                 self.diagnostics.append("拍摄操作：\(error.localizedDescription)")
             }
@@ -468,6 +488,7 @@ final class CameraSession: ObservableObject {
     }
 
     private func applyControlState(_ state: CameraControlState) {
+        if state.recordingState != .recording || controlState.recordingState != .recording { recordingStartedUptime = nil }
         if let lens = state.rawFields["lens"], lens != controlState.rawFields["lens"] {
             parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
             parameterOptions = [:]; parameterValues = [:]
@@ -677,6 +698,7 @@ final class CameraSession: ObservableObject {
         focusFeedbackTask?.cancel(); focusFeedbackTask = nil; focusRequest = nil
         playbackKeepaliveTask?.cancel(); playbackKeepaliveTask = nil
         controlState = CameraControlState(response: LumixResponse(status: .success))
+        recordingStartedUptime = nil
         generation = UUID()
         decoder.reset(generation: generation)
         image = nil

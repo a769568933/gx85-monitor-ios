@@ -113,12 +113,21 @@ struct CameraView: View {
     }
 
     private var status: some View {
+        VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 7) {
             Circle().fill(session.phase == .monitoring && !session.frameIsStale ? Color.green : Color.yellow).frame(width: 6, height: 6)
             Text(session.controlState.recordingState == .recording ? "正在录像" : (session.selectedShootingMode == .video && session.controlState.recordingState == .unknown ? "录像状态未确认" : (session.frameIsStale ? "画面已暂停" : session.phase.title)))
                 .font(.caption.weight(.medium)).foregroundStyle(.white.opacity(0.85))
         }
         .accessibilityElement(children: .combine)
+        if session.controlState.recordingState == .recording {
+            TimelineView(.periodic(from: .now, by: 1)) { _ in
+                Text(session.recordingTimerText).monospacedDigit().font(.caption.weight(.semibold))
+                    .foregroundStyle(.red).accessibilityIdentifier("recordingTimer")
+                    .accessibilityHint("从 App 确认开始计时；已在录像或重新连接时不推测总时长")
+            }
+        }
+        }
     }
 
     private var portraitControls: some View {

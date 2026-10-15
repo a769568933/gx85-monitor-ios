@@ -6,11 +6,61 @@ import GX85Core
 
 @MainActor
 final class CameraSessionTests: XCTestCase {
-    private func makeSession(_ commands: TestCommands, receiver: TestReceiver = TestReceiver()) -> CameraSession {
+    private func makeSession(_ commands: TestCommands, receiver: TestReceiver = TestReceiver(), clock: @escaping @Sendable () -> TimeInterval = { 0 }) -> CameraSession {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let settings = CameraSettings(defaults: defaults)
         settings.accessID = "test-camera-uuid"
-        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { 0 }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() }, makeMediaClient: { CameraMediaClient(endpoint: $0) })
+        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: clock, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() }, makeMediaClient: { CameraMediaClient(endpoint: $0) })
+    }
+
+    func testRecordingTimerStartsOnlyAfterConfirmationAndStopsWithRecording() async {
+        let commands = TestCommands(), time = ManualClock()
+        let session = makeSession(commands, clock: { time.now })
+        session.connect(); await waitUntil { session.canCapture }
+        XCTAssertNil(session.recordingElapsed)
+        session.selectShootingMode(.video)
+        session.performPrimaryAction()
+        XCTAssertNil(session.recordingElapsed, "Click alone must not start a timer")
+        await waitUntil { !session.actionInProgress && session.controlState.recordingState == .recording }
+        XCTAssertEqual(session.recordingElapsed, 0)
+        await time.advance(to: 17)
+        XCTAssertEqual(session.recordingElapsed, 17)
+        XCTAssertEqual(session.recordingTimerText, "00:17")
+        session.performPrimaryAction()
+        await waitUntil { !session.actionInProgress && session.controlState.recordingState == .stopped }
+        XCTAssertNil(session.recordingElapsed)
+        session.disconnect()
+    }
+
+    func testReconnectIntoExistingRecordingDoesNotInventClipDuration() async {
+        let commands = TestCommands(), time = ManualClock()
+        let session = makeSession(commands, clock: { time.now })
+        session.connect(); await waitUntil { session.canCapture }
+        session.selectShootingMode(.video); session.performPrimaryAction()
+        await waitUntil { !session.actionInProgress && session.controlState.recordingState == .recording }
+        await time.advance(to: 10)
+        XCTAssertEqual(session.recordingElapsed, 10)
+        session.setForeground(false)
+        XCTAssertNil(session.recordingElapsed)
+        session.setForeground(true)
+        await waitUntil { session.canCapture && session.controlState.recordingState == .recording }
+        XCTAssertNil(session.recordingElapsed)
+        XCTAssertEqual(session.recordingTimerText, "时长未知")
+        let starts = await commands.videoStartCount
+        XCTAssertEqual(starts, 1)
+        session.disconnect()
+    }
+    func testBodyStartedRecordingBeforeActionDoesNotInventStartTime() async {
+        let commands = TestCommands()
+        let session = makeSession(commands)
+        session.connect(); await waitUntil { session.canCapture }
+        await commands.setBodyRecording(true)
+        session.selectShootingMode(.video); session.performPrimaryAction()
+        await waitUntil { !session.actionInProgress && session.controlState.recordingState == .recording }
+        XCTAssertNil(session.recordingElapsed)
+        let starts = await commands.videoStartCount
+        XCTAssertEqual(starts, 0)
+        session.disconnect()
     }
 
     private func waitUntil(_ predicate: () -> Bool) async {

@@ -23,10 +23,13 @@ struct PhotoLibraryWriter: PhotoLibraryWriting {
         self.authorize = authorize; self.write = write
     }
     func save(fileURL: URL, kind: CameraMediaKind) async throws {
+        try Task.checkCancellation()
         let status = await authorize()
+        try Task.checkCancellation()
         guard status == .authorized || status == .limited else { throw PhotoSaveError.permission }
         guard kind == .photo || kind == .video else { throw PhotoSaveError.unsupported }
         guard fileURL.isFileURL, FileManager.default.fileExists(atPath: fileURL.path) else { throw MediaDownloadError.incomplete }
+        try Task.checkCancellation()
         try await write(fileURL, kind)
     }
     static func authorization() async -> PHAuthorizationStatus {
@@ -37,6 +40,7 @@ struct PhotoLibraryWriter: PhotoLibraryWriting {
         }
     }
     static func createAsset(_ file: URL, _ kind: CameraMediaKind) async throws {
+        try Task.checkCancellation()
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges {
                 let request = PHAssetCreationRequest.forAsset()
