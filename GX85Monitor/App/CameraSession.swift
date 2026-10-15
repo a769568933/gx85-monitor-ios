@@ -10,7 +10,7 @@ final class CameraSession: ObservableObject {
         let point: CGPoint
     }
     enum Phase: Equatable {
-        case disconnected, connecting, waitingApproval, ready, monitoring, recovering, failed
+        case disconnected, connecting, waitingApproval, ready, monitoring, recovering, failed, browsing
         var title: String {
             switch self {
             case .disconnected: return "未连接"
@@ -20,6 +20,7 @@ final class CameraSession: ObservableObject {
             case .monitoring: return "监看中"
             case .recovering: return "正在恢复连接"
             case .failed: return "连接未成功"
+            case .browsing: return "浏览相册"
             }
         }
     }
@@ -33,6 +34,8 @@ final class CameraSession: ObservableObject {
     @Published private(set) var parameterOptions: [ExposureParameter: [CameraParameterOption]] = [:]
     @Published private(set) var parameterValues: [ExposureParameter: String] = [:]
     @Published private(set) var focusRequest: FocusRequest?
+    @Published private(set) var isBrowsing = false
+    private(set) var playbackID: UUID?
     @Published private(set) var frameIsStale = false
     @Published private(set) var notice: String?
     @Published private(set) var lastError: String?
@@ -49,6 +52,7 @@ final class CameraSession: ObservableObject {
     let diagnostics = DiagnosticsLog()
 
     private let makeClient: ((CameraEndpoint) -> any CommandSending)?
+    private let makeMediaClient: ((CameraEndpoint) async -> CameraMediaClient)?
     private let makeReceiver: () -> any LiveViewReceiving
     private let clock: @Sendable () -> TimeInterval
     private let sleep: @Sendable (TimeInterval) async throws -> Void
@@ -60,6 +64,9 @@ final class CameraSession: ObservableObject {
     private var parameterRequest = UUID()
     private var lastParameterWarning: String?
     private var focusFeedbackTask: Task<Void, Never>?
+    private var playbackTask: Task<CameraMediaClient, Error>?
+    private var playbackRestoreTask: Task<Void, Error>?
+    private var playbackKeepaliveTask: Task<Void, Never>?
     private var receiver: (any LiveViewReceiving)?
     private var connectionTask: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
@@ -97,16 +104,18 @@ final class CameraSession: ObservableObject {
          },
          controlSleep: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
              try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
-         }) {
+         },
+         makeMediaClient: ((CameraEndpoint) async -> CameraMediaClient)? = nil) {
         self.settings = settings
         self.clock = clock
         self.sleep = sleep
         self.controlSleep = controlSleep
         self.makeReceiver = makeReceiver
         self.makeClient = makeClient
+        self.makeMediaClient = makeMediaClient
     }
 
-    var canCapture: Bool { controlReady && foreground && wantsConnection && !actionInProgress && !streamRestarting }
+    var canCapture: Bool { controlReady && foreground && wantsConnection && !actionInProgress && !streamRestarting && !isBrowsing }
     var isActive: Bool { wantsConnection }
 
     func connect() {
@@ -157,6 +166,124 @@ final class CameraSession: ObservableObject {
     }
 
     func clearNotice() { notice = nil }
+    func showNotice(_ message: String) { notice = String(message.prefix(2048)) }
+
+    func beginPlayback() async throws -> CameraMediaClient {
+        guard canCapture, let controls else { throw CameraControlError.unavailable("请先连接相机并停止当前操作。") }
+        actionInProgress = true
+        playbackID = UUID()
+        parameterTask?.cancel(); parameterTask = nil; parameterRequest = UUID()
+        let current = epoch
+        let task = Task<CameraMediaClient, Error> { [weak self] in
+            guard let self else { throw CancellationError() }
+            let state = try await controls.readState()
+            try self.check(current)
+            self.applyControlState(state)
+            guard state.recordingState == .stopped else { throw CameraControlError.unavailable("录像中或录像状态未确认，不能进入相册。") }
+            self.isBrowsing = true; self.controlReady = false; self.phase = .browsing
+            self.monitorTask?.cancel(); self.monitorTask = nil
+            self.displayClockTask?.cancel(); self.displayClockTask = nil
+            self.receiver?.stop(); self.receiver = nil
+            self.generation = UUID(); self.decoder.reset(generation: self.generation)
+            self.image = nil; self.focusRequest = nil
+            let playbackState = try await controls.enterPlayback()
+            try self.check(current)
+            self.applyControlState(playbackState)
+            let endpoint = try self.settings.endpoint()
+            let client: CameraMediaClient
+            if let factory = self.makeMediaClient { client = await factory(endpoint) }
+            else {
+                let description = await CameraIdentityResolver.descriptionLocation(endpoint: endpoint)
+                try self.check(current)
+                client = CameraMediaClient(endpoint: endpoint, descriptionURL: description, log: { [weak self] message in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.epoch == current else { return }
+                        self.diagnostics.append(message)
+                    }
+                })
+            }
+            try self.check(current)
+            self.startPlaybackKeepalive(current, controls: controls)
+            return client
+        }
+        playbackTask = task
+        do {
+            let result = try await withTaskCancellationHandler(operation: { try await task.value }, onCancel: { task.cancel() })
+            try check(current)
+            playbackTask = nil; actionInProgress = false
+            return result
+        } catch {
+            if isCurrent(current) {
+                playbackTask = nil; actionInProgress = false
+                if isBrowsing {
+                    await Task { @MainActor [weak self] in await self?.endPlayback() }.value
+                }
+                if isCurrent(current) { playbackID = nil; notice = error.localizedDescription }
+            }
+            throw error
+        }
+    }
+
+    func endPlayback(owner: UUID? = nil, noticeAfter: String? = nil) async {
+        guard isBrowsing else { return }
+        isBrowsing = false
+        playbackID = nil
+        playbackKeepaliveTask?.cancel(); playbackKeepaliveTask = nil
+        guard wantsConnection, foreground, let controls else { return }
+        actionInProgress = true
+        let current = epoch
+        let task = Task<Void, Error> { [weak self] in
+            guard let self else { throw CancellationError() }
+            let endpoint = try self.settings.endpoint()
+            self.generation = UUID()
+            let frameGeneration = self.generation, decoder = self.decoder
+            decoder.reset(generation: frameGeneration)
+            let receiver = self.makeReceiver()
+            self.receiver = receiver
+            try await receiver.start(endpoint: endpoint) { decoder.receive($0, generation: frameGeneration) }
+            try self.check(current)
+            let state = try await controls.leavePlayback(port: endpoint.port)
+            try self.check(current)
+            self.applyControlState(state)
+            self.policy = SessionPolicy(); self.policy.streamStarted(now: self.clock())
+            self.lastFrameTime = nil; self.lastFrameAge = nil; self.frameIsStale = false
+            self.fpsStart = self.clock(); self.fpsFrames = 0; self.frameRate = 0
+            self.controlReady = true; self.phase = .ready
+            self.startMonitor(current)
+        }
+        playbackRestoreTask = task
+        do {
+            try await task.value
+            guard isCurrent(current) else { return }
+            playbackRestoreTask = nil; actionInProgress = false
+            refreshParameters()
+            if let noticeAfter { notice = noticeAfter }
+        } catch {
+            guard isCurrent(current) else { return }
+            playbackRestoreTask = nil; actionInProgress = false
+            notice = (noticeAfter.map { $0 + "\n" } ?? "") + "恢复监看未成功：\(error.localizedDescription)"
+            recover()
+        }
+    }
+
+    private func startPlaybackKeepalive(_ current: UUID, controls: CameraControlService) {
+        playbackKeepaliveTask?.cancel()
+        playbackKeepaliveTask = Task { [weak self] in
+            guard let self else { return }
+            while self.isCurrent(current), self.isBrowsing, !Task.isCancelled {
+                do {
+                    try await self.sleep(2); try self.check(current)
+                    let state = try await controls.readState()
+                    try self.check(current)
+                    guard self.isBrowsing else { return }
+                    self.applyControlState(state)
+                } catch {
+                    guard self.isCurrent(current), self.isBrowsing, !Task.isCancelled else { return }
+                    self.diagnostics.append("相册连接状态：\(error.localizedDescription)")
+                }
+            }
+        }
+    }
 
     func selectShootingMode(_ mode: CameraShootingMode) {
         guard mode != .unknown, !actionInProgress, controlState.recordingState != .recording else { return }
@@ -452,6 +579,7 @@ final class CameraSession: ObservableObject {
                         self.lastError = error.localizedDescription
                         self.diagnostics.append("健康检查：\(error.localizedDescription)")
                     }
+                    if self.actionInProgress || self.isBrowsing { continue }
                     if self.policy.recordHealth(succeeded: healthy) == .reconnect {
                         self.recover(); return
                     }
@@ -546,6 +674,7 @@ final class CameraSession: ObservableObject {
         parameterService = nil
         parameterOptions = [:]; parameterValues = [:]; lastParameterWarning = nil
         focusFeedbackTask?.cancel(); focusFeedbackTask = nil; focusRequest = nil
+        playbackKeepaliveTask?.cancel(); playbackKeepaliveTask = nil
         controlState = CameraControlState(response: LumixResponse(status: .success))
         generation = UUID()
         decoder.reset(generation: generation)
@@ -570,6 +699,10 @@ final class CameraSession: ObservableObject {
         connectionTask?.cancel(); connectionTask = nil
         monitorTask?.cancel(); monitorTask = nil
         captureTask?.cancel(); captureTask = nil
+        playbackTask?.cancel(); playbackTask = nil
+        playbackRestoreTask?.cancel(); playbackRestoreTask = nil
+        isBrowsing = false
+        playbackID = nil
         isCapturing = false
         actionInProgress = false
         deferredRecovery = false

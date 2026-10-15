@@ -50,7 +50,10 @@ final class CameraMediaClientTests: XCTestCase {
         let response = HTTPURLResponse(url: source, statusCode: 302, httpVersion: nil, headerFields: nil)!
         let task = session.dataTask(with: source)
         let decision = RedirectDecision()
-        SameCameraRedirectGuard(host: "192.168.54.1").urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request) { decision.url = $0 }
+        decision.url = source
+        let callback = expectation(description: "Redirect decision")
+        SameCameraRedirectGuard(host: "192.168.54.1").urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request) { decision.url = $0; callback.fulfill() }
+        wait(for: [callback], timeout: 1)
         XCTAssertNil(decision.url)
         task.cancel()
     }
@@ -58,7 +61,11 @@ final class CameraMediaClientTests: XCTestCase {
     private static let emptyPage = Data("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:BrowseResponse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\"><Result>&lt;DIDL-Lite/&gt;</Result><NumberReturned>0</NumberReturned><TotalMatches>0</TotalMatches></u:BrowseResponse></s:Body></s:Envelope>".utf8)
 }
 
-private final class RedirectDecision: @unchecked Sendable { var url: URL? }
+private final class RedirectDecision: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: URL?
+    var url: URL? { get { lock.withLock { stored } } set { lock.withLock { stored = newValue } } }
+}
 
 private final class MediaStubProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
@@ -70,8 +77,20 @@ private final class MediaStubProtocol: URLProtocol, @unchecked Sendable {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
-        let reply = Self.lock.withLock { () -> (@Sendable (URLRequest) -> Data)? in Self.recorded.append(request); return Self.handler }
-        let data = reply?(request) ?? Data()
+        var received = request
+        if received.httpBody == nil, let stream = received.httpBodyStream {
+            stream.open()
+            var body = Data(), buffer = [UInt8](repeating: 0, count: 4096)
+            while stream.hasBytesAvailable, body.count < 16 * 1024 {
+                let count = stream.read(&buffer, maxLength: buffer.count)
+                if count <= 0 { break }
+                body.append(contentsOf: buffer.prefix(count))
+            }
+            stream.close()
+            received.httpBody = body
+        }
+        let reply = Self.lock.withLock { () -> (@Sendable (URLRequest) -> Data)? in Self.recorded.append(received); return Self.handler }
+        let data = reply?(received) ?? Data()
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Length": String(data.count)])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)

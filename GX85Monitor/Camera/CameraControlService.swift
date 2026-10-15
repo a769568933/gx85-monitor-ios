@@ -123,6 +123,36 @@ actor CameraControlService {
         }
     }
 
+    func enterPlayback() async throws -> CameraControlState {
+        try await transaction {
+            let state = try await self.readStateUnlocked()
+            guard state.recordingState == .stopped else { throw CameraControlError.unavailable("录像中或录像状态未确认，不能进入相册。") }
+            guard state.isBusy != true else { throw CameraControlError.unavailable("相机正在忙，请稍后打开相册。") }
+            _ = try await self.send(.stopStream)
+            _ = try await self.send(.playbackMode)
+            for _ in 0..<4 {
+                let after = try await self.readStateUnlocked()
+                if after.rawFields["cammode"] != "recmode" { return after }
+                try await self.sleep(0.1)
+            }
+            throw CameraControlError.unconfirmed
+        }
+    }
+
+    func leavePlayback(port: UInt16) async throws -> CameraControlState {
+        try await transaction {
+            var state = try await self.readStateUnlocked()
+            // A physical camera operation has priority over the album's previous state.
+            if state.recordingState != .recording {
+                _ = try await self.send(.recordMode)
+                state = try await self.readStateUnlocked()
+                guard state.rawFields["cammode"] != "playmode" else { throw CameraControlError.unconfirmed }
+            }
+            _ = try await self.send(.startStream(port: port))
+            return state
+        }
+    }
+
     func focus(at point: CGPoint) async throws {
         try await transaction {
             guard point.x.isFinite, point.y.isFinite, (0...1).contains(point.x), (0...1).contains(point.y) else { throw ControlInputError.invalidParameter }

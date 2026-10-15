@@ -96,6 +96,22 @@ final class CameraSessionTests: XCTestCase {
         session.disconnect()
     }
 
+    func testOldAlbumCloseCannotCloseNewPlaybackOwner() async throws {
+        let session = makeSession(TestCommands())
+        session.connect(); await waitUntil { session.canCapture }
+        _ = try await session.beginPlayback()
+        let previous = try XCTUnwrap(session.playbackID)
+        await session.endPlayback(owner: previous)
+        _ = try await session.beginPlayback()
+        let current = try XCTUnwrap(session.playbackID)
+        XCTAssertNotEqual(previous, current)
+        await session.endPlayback(owner: previous)
+        XCTAssertTrue(session.isBrowsing)
+        XCTAssertEqual(session.playbackID, current)
+        await session.endPlayback(owner: current)
+        session.disconnect()
+    }
+
     func testBackgroundStopsReceiverAndForegroundResumesOnlyWhenWanted() async {
         let receiver = TestReceiver()
         let session = makeSession(TestCommands(), receiver: receiver)

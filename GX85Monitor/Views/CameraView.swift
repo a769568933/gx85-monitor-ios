@@ -5,6 +5,10 @@ struct CameraView: View {
     @ObservedObject var session: CameraSession
     @State private var fullscreen = false
     @State private var showSettings = false
+    @State private var showAlbum = false
+    @State private var openingAlbum = false
+    @State private var albumModel: CameraAlbumModel?
+    @State private var mediaClient: CameraMediaClient?
 
     var body: some View {
         GeometryReader { geometry in
@@ -35,6 +39,7 @@ struct CameraView: View {
                         HStack {
                             status
                             Spacer()
+                            connectionButton
                             iconButton("gearshape", label: "设置") { showSettings = true }
                         }
                         .padding(.leading, 18).padding(.trailing, 6).frame(height: 44)
@@ -52,11 +57,23 @@ struct CameraView: View {
                             .padding(.bottom, fullscreen ? 12 : (landscape ? 12 : 168))
                     }
                 }
+                if openingAlbum {
+                    ProgressView("打开相机相册").padding(20)
+                        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 14))
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showSettings) { SettingsView(session: session, settings: session.settings) }
+        .sheet(isPresented: $showAlbum, onDismiss: {
+            let previous = albumModel
+            albumModel = nil; mediaClient = nil
+            Task { await previous?.close() }
+        }) {
+            if let albumModel, let mediaClient { CameraAlbumView(model: albumModel, client: mediaClient) }
+        }
+        .onChange(of: session.isBrowsing) { browsing in if !browsing { showAlbum = false } }
     }
 
     private var preview: some View {
@@ -108,7 +125,7 @@ struct CameraView: View {
         VStack(spacing: 8) {
             modePicker
             HStack {
-                connectionButton.frame(maxWidth: .infinity)
+                albumButton.frame(maxWidth: .infinity)
                 shutter
                 iconButton("arrow.up.left.and.arrow.down.right", label: "全屏监看") { fullscreen = true }
                     .frame(maxWidth: .infinity)
@@ -119,7 +136,10 @@ struct CameraView: View {
 
     private var landscapeControls: some View {
         VStack(spacing: 4) {
-            iconButton("gearshape", label: "设置") { showSettings = true }
+            HStack(spacing: 0) {
+                albumButton
+                iconButton("gearshape", label: "设置") { showSettings = true }
+            }
             modePicker
             Spacer(minLength: 2)
             shutter
@@ -136,6 +156,27 @@ struct CameraView: View {
         iconButton(session.isActive ? "wifi.slash" : "wifi", label: session.isActive ? "断开相机" : "连接相机") {
             if session.isActive { session.disconnect() } else { session.connect() }
         }
+    }
+
+    private var albumButton: some View {
+        iconButton("photo.on.rectangle", label: "相机相册") {
+            guard !openingAlbum else { return }
+            openingAlbum = true
+            Task {
+                do {
+                    let client = try await session.beginPlayback()
+                    guard session.isBrowsing else { openingAlbum = false; return }
+                    let owner = session.playbackID
+                    mediaClient = client
+                    albumModel = CameraAlbumModel(client: client, onClose: { [weak session] reason in
+                        await session?.endPlayback(owner: owner, noticeAfter: reason)
+                    })
+                    showAlbum = true
+                } catch { }
+                openingAlbum = false
+            }
+        }
+        .disabled(!session.canCapture || session.controlState.recordingState != .stopped || openingAlbum)
     }
 
     private var shutter: some View {

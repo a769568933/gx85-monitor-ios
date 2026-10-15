@@ -4,6 +4,9 @@ import GX85Core
 
 /// Unicast to the entered camera only. No multicast entitlement or Wi-Fi scanning required.
 enum CameraIdentityResolver {
+    static func descriptionLocation(endpoint: CameraEndpoint) async -> URL? {
+        try? await UnicastDiscovery().location(endpoint: endpoint)
+    }
     static func resolve(endpoint: CameraEndpoint) async -> String? {
         do {
             let probe = UnicastDiscovery()
@@ -28,7 +31,8 @@ final class SameCameraRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecke
     private let host: String
     init(host: String) { self.host = host }
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
-        completionHandler(request.url?.host == host && request.url?.scheme == "http" ? request : nil)
+        if let url = request.url, (try? MediaURLPolicy.validate(url, cameraHost: host)) != nil { completionHandler(request) }
+        else { completionHandler(nil) }
     }
 }
 
