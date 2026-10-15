@@ -26,9 +26,9 @@ final class CameraPresentationUITests: XCTestCase {
             let context = CGContext(data: buffer.baseAddress, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
             context?.draw(pixel, in: CGRect(x: 0, y: 0, width: 1, height: 1))
         }
-        XCTAssertEqual(Int(rgba[0]), 235, accuracy: 20, "Screenshot must contain the orange test target at screen center")
-        XCTAssertEqual(Int(rgba[1]), 153, accuracy: 20)
-        XCTAssertEqual(Int(rgba[2]), 61, accuracy: 20)
+        XCTAssertEqual(Double(rgba[0]), 235, accuracy: 20, "Screenshot must contain the orange test target at screen center")
+        XCTAssertEqual(Double(rgba[1]), 153, accuracy: 20)
+        XCTAssertEqual(Double(rgba[2]), 61, accuracy: 20)
     }
     func testPortraitAndBothLandscapesStayCentered() {
         let app = launch()
