@@ -4,6 +4,22 @@ import GX85Core
 @testable import GX85Monitor
 
 final class CameraControlServiceTests: XCTestCase {
+    func testSignedShutterWriteAcceptsEquivalentUnsigned16BitReadback() async throws {
+        let camera = UnsignedShutterCamera()
+        try await CameraControlService(client: camera).setParameter(.shutter, rawValue: "-1536/256")
+        let writes = await camera.writes
+        XCTAssertEqual(writes, 1)
+    }
+
+    func testUnsignedFiniteSingleExposureIsNotCanceledAfter100ms() async {
+        let camera = CaptureDriveCamera(drive: "normal", shutter: "64000/256")
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        _ = await controls.capturePhoto()
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.releaseCapture))
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+    }
+
     func testConfirmedNormalDriveDoesNotCancelSingleElectronicExposureAfter100ms() async {
         let camera = CaptureDriveCamera(drive: "normal", shutter: "1451/256")
         let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
@@ -253,6 +269,14 @@ private actor CaptureDriveCamera: CommandSending {
             return LumixResponse(status: .success, fields: ["shtrspeed": shutter])
         }
         return LumixResponse(status: .success)
+    }
+}
+
+private actor UnsignedShutterCamera: CommandSending {
+    private(set) var writes = 0
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        if case .setSetting(type: "shtrspeed", value: "-1536/256") = command { writes += 1 }
+        return LumixResponse(status: .success, fields: ["shtrspeed": "64000/256"])
     }
 }
 

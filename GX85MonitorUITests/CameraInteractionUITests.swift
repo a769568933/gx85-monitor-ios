@@ -29,22 +29,25 @@ final class CameraInteractionUITests: XCTestCase {
         let center = CGPoint(x: iso.frame.midX, y: iso.frame.midY)
         XCTAssertTrue(app.images["livePreview"].frame.contains(center), "The control must overlap the image for this regression test")
         iso.tap()
-        app.buttons["400"].tap()
+        let wheel = app.pickerWheels.firstMatch
+        XCTAssertTrue(wheel.waitForExistence(timeout: 3))
+        wheel.adjust(toPickerWheelValue: "400")
+        XCTAssertTrue(app.staticTexts["相机：400"].waitForExistence(timeout: 5), "Scrolling must apply without confirmation")
+        XCTAssertTrue(wheel.exists)
+        app.buttons["完成"].tap()
         assertNoFocus(in: app)
     }
 
     func testAperturePickerScrollsToSmallApertureWithoutFocusingImage() {
         let app = launch()
         app.buttons["parameter-aperture"].tap()
-        let options = app.descendants(matching: .any)["parameter-options"].firstMatch
-        guard options.waitForExistence(timeout: 3) else { return XCTFail("Exposure choices need a scrollable panel") }
-        for _ in 0..<8 {
-            if app.buttons["F22"].isHittable { break }
-            options.swipeUp()
-        }
-        XCTAssertTrue(app.buttons["F22"].isHittable)
-        app.buttons["F22"].tap()
-        XCTAssertFalse(options.exists)
+        let wheel = app.pickerWheels.firstMatch
+        guard wheel.waitForExistence(timeout: 3) else { return XCTFail("Exposure choices need a native scroll wheel") }
+        wheel.swipeUp()
+        wheel.adjust(toPickerWheelValue: "F22")
+        XCTAssertTrue(app.staticTexts["相机：F22"].waitForExistence(timeout: 5))
+        XCTAssertTrue(wheel.exists, "Selection should stay open while values apply")
+        app.buttons["完成"].tap()
         assertNoFocus(in: app)
         XCTAssertFalse(app.staticTexts["光圈已由相机确认。"].exists)
     }

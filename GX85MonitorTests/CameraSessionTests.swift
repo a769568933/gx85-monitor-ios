@@ -25,6 +25,29 @@ final class CameraSessionTests: XCTestCase {
         session.disconnect()
     }
 
+    func testCurrentMenuCanUpgradeQVGAWhenGetSettingIsUnsupported() async {
+        let commands = TestCommands()
+        await commands.configureLiveView(size: "qvga", rejectRead: true)
+        let session = makeSession(commands)
+        session.connect(); await waitUntil { session.canCapture }
+        let streamSize = await commands.sizeWhenStreamStarted
+        XCTAssertEqual(streamSize, "vga", "The supplied MC262 curmenu is authoritative even when getsetting is rejected")
+        session.disconnect()
+    }
+
+    func testReturningFromAlbumRestoresHighQualityBeforeStartingStream() async throws {
+        let commands = TestCommands()
+        await commands.configureLiveView(size: "vga", rejectRead: true)
+        let session = makeSession(commands)
+        session.connect(); await waitUntil { session.canCapture }
+        _ = try await session.beginPlayback()
+        await commands.configureLiveView(size: "qvga", rejectRead: true)
+        await session.endPlayback()
+        let streamSize = await commands.sizeWhenStreamStarted
+        XCTAssertEqual(streamSize, "vga")
+        session.disconnect()
+    }
+
     func testUnknownHigherStreamSettingIsNotDowngradedToVGA() async {
         let commands = TestCommands()
         await commands.configureLiveView(size: "1280x960")
@@ -381,7 +404,8 @@ final class CameraSessionTests: XCTestCase {
 private actor TestCommands: CommandSending {
     private(set) var liveViewSize: String?
     private(set) var sizeWhenStreamStarted: String?
-    func configureLiveView(size: String) { liveViewSize = size }
+    private var rejectLiveViewRead = false
+    func configureLiveView(size: String, rejectRead: Bool = false) { liveViewSize = size; rejectLiveViewRead = rejectRead }
     var captureCount = 0
     var videoStartCount = 0
     var videoStopCount = 0
@@ -423,7 +447,13 @@ private actor TestCommands: CommandSending {
                 let xml = "<camrply><result>ok</result><menuset model=\"GX80\"><item id=\"menu_item_id_liveview_quality\"><item id=\"menu_item_id_liveviewsize_vga\" cmd_mode=\"setsetting\" cmd_type=\"liveviewsize\" cmd_value=\"vga\"/><item id=\"menu_item_id_liveviewsize_qvga\" cmd_mode=\"setsetting\" cmd_type=\"liveviewsize\" cmd_value=\"qvga\"/></item></menuset></camrply>"
                 return try LumixResponse.parse(data: Data(xml.utf8))
             }
-            if command == .getSetting("liveviewsize") { return LumixResponse(status: .success, fields: ["liveviewsize": liveViewSize!]) }
+            if command == .getInfo("curmenu") {
+                return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><mainmenu><item id=\"menu_item_id_liveview_quality\" enable=\"yes\" value=\"\(liveViewSize!)\"/><item id=\"menu_item_id_liveviewsize_vga\" enable=\"yes\"/><item id=\"menu_item_id_liveviewsize_qvga\" enable=\"yes\"/></mainmenu></menuinfo></camrply>".utf8))
+            }
+            if command == .getSetting("liveviewsize") {
+                if rejectLiveViewRead { throw CommandError.cameraRejected("err_param") }
+                return LumixResponse(status: .success, fields: ["liveviewsize": liveViewSize!])
+            }
             if case .setSetting(type: "liveviewsize", value: let value) = command {
                 _ = try command.makeURL(endpoint: CameraEndpoint(host: "192.168.54.1"))
                 liveViewSize = value

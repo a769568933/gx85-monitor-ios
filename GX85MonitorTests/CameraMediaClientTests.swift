@@ -1,6 +1,7 @@
 import Foundation
 import XCTest
 import GX85Core
+import UIKit
 @testable import GX85Monitor
 
 final class CameraMediaClientTests: XCTestCase {
@@ -32,6 +33,35 @@ final class CameraMediaClientTests: XCTestCase {
         XCTAssertTrue(body.contains("<RequestedCount>1</RequestedCount>"))
         XCTAssertTrue(body.contains("<StartingIndex>0</StartingIndex>"))
         XCTAssertTrue(body.contains("<BrowseFlag>BrowseDirectChildren</BrowseFlag>"))
+        XCTAssertTrue(body.contains("<pana:X_FromCP>LumixLink2.0</pana:X_FromCP>"), "Request the camera's Lumix resource metadata")
+    }
+
+    @MainActor
+    func testStandardDLNAThumbnailDecodesWithoutBecomingAnOriginal() async throws {
+        let jpeg = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 24)).jpegData(withCompressionQuality: 0.9) { context in
+            UIColor.orange.setFill(); context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
+        }
+        let response = Data("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:BrowseResponse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\"><Result><![CDATA[<DIDL-Lite><item id=\"photo\"><res protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_TN\">http://192.168.54.1/TN.JPG</res><res protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_LRG\">http://192.168.54.1/LRG.JPG</res></item></DIDL-Lite>]]></Result><NumberReturned>1</NumberReturned><TotalMatches>1</TotalMatches></u:BrowseResponse></s:Body></s:Envelope>".utf8)
+        MediaStubProtocol.set { request in request.httpMethod == "POST" ? response : jpeg }
+        let camera = try client()
+        let page = try await camera.browse(start: 0, count: 40)
+        let item = try XCTUnwrap(page.items.first)
+        XCTAssertEqual(item.thumbnailResource?.role, .thumbnail)
+        XCTAssertEqual(item.imagePreviewResource?.role, .preview)
+        XCTAssertNil(item.originalResource, "Generic DLNA JPEGs must never be exported as originals")
+        guard let resource = item.thumbnailResource else { return XCTFail("A displayable thumbnail is required") }
+        let image = await CameraThumbnailLoader(client: camera).load(resource)
+        XCTAssertEqual(image?.cgImage?.width, 32)
+        XCTAssertEqual(image?.cgImage?.height, 24)
+        XCTAssertEqual(MediaStubProtocol.requests.last?.url?.path, "/TN.JPG")
+    }
+
+    func testUnknownJPEGCanBePreviewedButCannotBeExported() throws {
+        let resource = CameraMediaResource(url: URL(string: "http://192.168.54.1/preview.JPG")!, mimeType: "image/jpeg", role: .unknown)
+        let item = CameraMediaItem(id: "photo", title: "photo", kind: .photo, resources: [resource])
+        XCTAssertEqual(item.thumbnailResource, resource)
+        XCTAssertEqual(item.imagePreviewResource, resource)
+        XCTAssertNil(item.originalResource)
     }
 
     func testNewestFirstPagingStartsAtCatalogTailAndNeverReordersLoadedPages() async throws {

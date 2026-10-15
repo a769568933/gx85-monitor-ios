@@ -5,6 +5,12 @@ import GX85Core
 
 @MainActor
 final class CameraParameterTests: XCTestCase {
+    func testUnsigned16BitShutterReadbackDisplaysActualLongExposure() async throws {
+        let camera = GX80ParameterReply(shutter: "64171/256", aperture: "768/256")
+        let snapshot = try await CameraParameterService(controls: CameraControlService(client: camera)).load(lens: "normal")
+        XCTAssertEqual(snapshot.values[.shutter], "40s")
+    }
+
     func testMCombinedControlExposesAndConfirmsBothShutterAndLensAperture() async throws {
         let camera = EmbeddedLensCamera(apertureEnabled: false, shutterEnabled: false, combinedEnabled: true)
         let controls = CameraControlService(client: camera)

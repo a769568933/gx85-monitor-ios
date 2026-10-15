@@ -83,12 +83,16 @@ final class CameraPresentationUITests: XCTestCase {
     func testParameterMenuAndAlbumUseLabeledSimulation() {
         let app = launch()
         app.buttons["parameter-iso"].tap()
-        XCTAssertTrue(app.buttons["400"].waitForExistence(timeout: 3))
+        let wheel = app.pickerWheels.firstMatch
+        XCTAssertTrue(wheel.waitForExistence(timeout: 3))
         attach(app, "portrait-iso-options")
-        app.buttons["400"].tap()
+        wheel.adjust(toPickerWheelValue: "400")
+        XCTAssertTrue(app.staticTexts["相机：400"].waitForExistence(timeout: 5))
+        app.buttons["完成"].tap()
         app.buttons["相机相册"].tap()
         XCTAssertTrue(app.staticTexts["模拟相册 · 非相机连接"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["SIM-PHOTO.JPG"].waitForExistence(timeout: 4))
+        XCTAssertTrue(app.images["album-image-sim-photo"].waitForExistence(timeout: 8), "The cell must contain decoded image pixels")
         app.buttons["选择 SIM-PHOTO.JPG"].tap()
         XCTAssertTrue(app.buttons["导出原文件"].isEnabled)
         attach(app, "portrait-camera-album")
