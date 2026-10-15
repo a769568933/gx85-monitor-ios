@@ -30,6 +30,38 @@ final class CameraPresentationUITests: XCTestCase {
         XCTAssertEqual(Double(rgba[1]), 153, accuracy: 20)
         XCTAssertEqual(Double(rgba[2]), 61, accuracy: 20)
     }
+    func testDisconnectedGuideDoesNotOverlapMonitoringControlsInAnyOrientation() {
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = []
+        app.launch()
+        defer { XCUIDevice.shared.orientation = .portrait }
+        for (orientation, name) in [(UIDeviceOrientation.portrait, "connection-portrait"), (.landscapeLeft, "connection-landscape-left"), (.landscapeRight, "connection-landscape-right")] {
+            XCUIDevice.shared.orientation = orientation
+            let window = app.windows.firstMatch
+            expectation(for: NSPredicate { _, _ in
+                orientation == .portrait ? window.frame.height > window.frame.width : window.frame.width > window.frame.height
+            }, evaluatedWith: window)
+            waitForExpectations(timeout: 5)
+            Thread.sleep(forTimeInterval: 0.8)
+            let title = app.staticTexts["连接你的 GX85"]
+            XCTAssertTrue(title.waitForExistence(timeout: 5))
+            for parameter in ["shutter", "aperture", "iso"] {
+                XCTAssertFalse(app.buttons["parameter-\(parameter)"].exists, "Exposure controls must not cover connection instructions")
+            }
+            XCTAssertFalse(app.buttons["primaryShutter"].exists)
+            XCTAssertFalse(app.buttons["全屏监看"].exists)
+            let settings = app.buttons["设置"]
+            XCTAssertTrue(settings.isHittable)
+            XCTAssertGreaterThanOrEqual(title.frame.minY, settings.frame.maxY + 8, "Guide content needs its own space below the toolbar")
+            XCTAssertEqual(app.buttons.matching(identifier: "连接相机").count, 1)
+            attach(app, name)
+        }
+        app.buttons["设置"].tap()
+        XCTAssertTrue(app.navigationBars["设置"].waitForExistence(timeout: 3))
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.staticTexts["连接你的 GX85"].waitForExistence(timeout: 3))
+    }
     func testPortraitAndBothLandscapesStayCentered() {
         let app = launch()
         defer { XCUIDevice.shared.orientation = .portrait }
