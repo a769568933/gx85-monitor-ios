@@ -96,7 +96,10 @@ final class CameraPreviewLayoutTests: XCTestCase {
 
 private actor LayoutCommands: CommandSending {
     func send(_ command: LumixCommand) async throws -> LumixResponse {
-        LumixResponse(status: .success, fields: ["rec": "off", "focusmode": "mf"])
+        // Successful captures are deliberately quiet. Exercise the remaining
+        // error banner so this rendering test still covers overlay geometry.
+        if command == .capture { throw CommandError.cameraRejected("err_reject") }
+        return LumixResponse(status: .success, fields: ["rec": "off", "focusmode": "mf"])
     }
 }
 private final class LayoutReceiver: LiveViewReceiving {
