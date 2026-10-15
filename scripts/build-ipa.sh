@@ -24,7 +24,7 @@ GX_PLATFORM=$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$GX_APP/Info.p
 [[ "$GX_PLATFORM" == 'iphoneos' ]] || { echo 'Refusing to package a simulator app.' >&2; exit 1; }
 GX_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$GX_APP/Info.plist")
 GX_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$GX_APP/Info.plist")
-[[ "$GX_VERSION" == '0.2.1' && "$GX_BUILD" == '3' ]] || { echo 'Unexpected version.' >&2; exit 1; }
+[[ "$GX_VERSION" == '0.2.2' && "$GX_BUILD" == '4' ]] || { echo 'Unexpected version.' >&2; exit 1; }
 lipo "$GX_APP/GX85Monitor" -verify_arch arm64
 mkdir -p "$GX_WORK/Payload"
 ditto "$GX_APP" "$GX_WORK/Payload/GX85Monitor.app"

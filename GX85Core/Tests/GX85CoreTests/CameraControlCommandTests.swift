@@ -12,6 +12,7 @@ final class CameraControlCommandTests: XCTestCase {
             (.autoFocus, "mode=camcmd&value=oneshot_af"),
             (.playbackMode, "mode=camcmd&value=playmode"),
             (.getInfo("allmenu"), "mode=getinfo&type=allmenu"),
+            (.getInfo("lens"), "mode=getinfo&type=lens"),
             (.getSetting("iso"), "mode=getsetting&type=iso")
         ]
         for (command, query) in cases {
@@ -39,7 +40,7 @@ final class CameraControlCommandTests: XCTestCase {
         let endpoint = try CameraEndpoint(host: "192.168.54.1")
         let url = try LumixCommand.touchFocus(x: 0, y: 1000).makeURL(endpoint: endpoint)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "mode", value: "camctrl"), URLQueryItem(name: "type", value: "touchaf"), URLQueryItem(name: "value", value: "0/1000")])
+        XCTAssertEqual(components.queryItems, [URLQueryItem(name: "mode", value: "camctrl"), URLQueryItem(name: "type", value: "touch"), URLQueryItem(name: "value", value: "0/1000"), URLQueryItem(name: "value2", value: "on")])
         for (x, y) in [(-1, 500), (1001, 0), (0, -1), (500, 1001)] {
             XCTAssertThrowsError(try LumixCommand.touchFocus(x: x, y: y).makeURL(endpoint: endpoint))
         }

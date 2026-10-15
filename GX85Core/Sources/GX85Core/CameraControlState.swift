@@ -11,6 +11,16 @@ public struct CameraControlState: Equatable, Sendable {
     public let remainingPhotos: Int?
     public let rawFields: [String: String]
 
+    /// GX80/GX85 report rec/play; some Lumix bodies report recmode/playmode.
+    /// Neither spelling identifies the physical photo/video dial.
+    public var isPlayback: Bool? {
+        switch rawFields["cammode"]?.lowercased() {
+        case "play", "playmode": return true
+        case "rec", "recmode": return false
+        default: return nil
+        }
+    }
+
     public init(response: LumixResponse) {
         rawFields = response.fields
         guard response.status == .success else {
@@ -33,6 +43,6 @@ public struct CameraControlState: Equatable, Sendable {
         default: isBusy = fields["sd_access"]?.lowercased() == "on" ? true : nil
         }
         cardStatus = fields["sdcardstatus"]
-        remainingPhotos = fields["recremaincapacity"].flatMap(Int.init).flatMap { $0 >= 0 ? $0 : nil }
+        remainingPhotos = (fields["remaincapacity"] ?? fields["recremaincapacity"]).flatMap(Int.init).flatMap { $0 >= 0 ? $0 : nil }
     }
 }

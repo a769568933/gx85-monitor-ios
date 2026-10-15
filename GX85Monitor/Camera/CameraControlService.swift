@@ -52,6 +52,8 @@ actor CameraControlService {
                     let state = try await self.readStateUnlocked()
                     if let reason = self.photoRestriction(state) { return .rejected(reason) }
                     self.log("拍前：卡=\(state.cardStatus ?? "未知")，占用=\(state.isBusy.map(String.init) ?? "未知")；保留机身对焦优先设置。")
+                    stage = "读取拍摄方式"
+                    let selfFinishingSingle = try await self.shouldLetSingleExposureFinish()
                     // capture applies the camera's own focus priority. GX80 can reject
                     // oneshot_af in AFS; that optional command must not block the shutter.
                     stage = "发送快门"
@@ -59,12 +61,19 @@ actor CameraControlService {
                     self.log("发送快门请求：mode=camcmd&value=capture（仅发送一次）")
                     _ = try await self.send(.capture)
                     accepted = true
-                    try await self.sleep(0.1)
-                    stage = "释放快门"
-                    releaseAttempted = true
-                    self.log("发送释放快门请求：mode=camcmd&value=capture_cancel")
-                    _ = try await self.send(.releaseCapture)
-                    pressed = false
+                    if selfFinishingSingle {
+                        // A normal finite exposure is self-terminating. Canceling at
+                        // 100ms may abort delayed AF/electronic capture before it starts.
+                        pressed = false
+                        self.log("已确认单张有限曝光：等待机身完成，不提前发送 capture_cancel。")
+                    } else {
+                        try await self.sleep(0.1)
+                        stage = "释放快门"
+                        releaseAttempted = true
+                        self.log("发送释放快门请求：mode=camcmd&value=capture_cancel")
+                        _ = try await self.send(.releaseCapture)
+                        pressed = false
+                    }
                     stage = "拍后状态"
                     let deadline = ProcessInfo.processInfo.systemUptime + 4
                     for _ in 0..<20 {
@@ -88,6 +97,31 @@ actor CameraControlService {
                 }
             }
         } catch { return .unknown }
+    }
+
+    private func shouldLetSingleExposureFinish() async throws -> Bool {
+        do {
+            let menu = try await send(.getInfo("curmenu"))
+            let drive = try CameraCapabilities.driveMode(currentMenu: menu.body)
+            log("拍摄驱动：\(drive ?? "未知，使用兼容释放")")
+            guard drive == "normal" else { return false }
+            let setting = try await send(.getSetting("shtrspeed"))
+            guard let raw = setting.fields["shtrspeed"] ?? setting.fields["value"] else { return false }
+            let parts = raw.split(separator: "/", omittingEmptySubsequences: false)
+            guard parts.count == 2, parts[1] == "256", let numerator = Int(parts[0]), (-2048...4096).contains(numerator) else {
+                log("快门为长按或未知编码：\(String(raw.prefix(64)))；保留释放步骤。")
+                return false
+            }
+            return true
+        } catch CommandError.cameraRejected(let code) {
+            log("拍摄方式未提供：\(code)；使用兼容释放。")
+            return false
+        } catch ResponseError.malformed {
+            log("拍摄方式元数据未识别；使用兼容释放。")
+            return false
+        }
+        // Timeouts, cancellation, and access errors propagate: never fire after
+        // an uncertain preflight or try a second shutter as a fallback.
     }
 
     func setRecording(_ active: Bool) async throws -> CameraRecordingState {
@@ -133,7 +167,7 @@ actor CameraControlService {
             _ = try await self.send(.playbackMode)
             for _ in 0..<4 {
                 let after = try await self.readStateUnlocked()
-                if after.rawFields["cammode"] != "recmode" { return after }
+                if after.isPlayback == true { return after }
                 try await self.sleep(0.1)
             }
             throw CameraControlError.unconfirmed
@@ -144,11 +178,19 @@ actor CameraControlService {
         try await transaction {
             var state = try await self.readStateUnlocked()
             // A physical camera operation has priority over the album's previous state.
-            guard state.recordingState != .unknown else { throw CameraControlError.unconfirmed }
+            // GX85 omits rec in an explicit play state; that is a valid state from
+            // which to return to rec, not an unknown recording in shooting mode.
+            guard state.recordingState != .unknown || state.isPlayback == true else { throw CameraControlError.unconfirmed }
+            if state.isPlayback == true, state.recordingState == .recording { throw CameraControlError.unconfirmed }
             if state.recordingState != .recording {
                 _ = try await self.send(.recordMode)
-                state = try await self.readStateUnlocked()
-                guard state.rawFields["cammode"] != "playmode" else { throw CameraControlError.unconfirmed }
+                var restored = false
+                for _ in 0..<8 {
+                    state = try await self.readStateUnlocked()
+                    if state.isPlayback == false, state.recordingState != .unknown { restored = true; break }
+                    try await self.sleep(0.1)
+                }
+                guard restored else { throw CameraControlError.unconfirmed }
             }
             _ = try await self.send(.startStream(port: port))
             return state
@@ -162,14 +204,16 @@ actor CameraControlService {
             let mode = (response.fields["focusmode"] ?? response.fields["value"] ?? "").lowercased()
             guard mode != "mf" else { throw CameraControlError.unavailable("机身处于 MF，请切换自动对焦。") }
             guard ["afs", "afc", "aff"].contains(mode) else { throw CameraControlError.unavailable("无法确认当前对焦模式。") }
-            _ = try await self.send(.touchFocus(x: Int((point.x * 1000).rounded()), y: Int((point.y * 1000).rounded())))
+            let x = Int((point.x * 1000).rounded()), y = Int((point.y * 1000).rounded())
+            self.log("点按对焦请求：type=touch，位置=\(x)/\(y)，value2=on。")
+            _ = try await self.send(.touchFocus(x: x, y: y))
         }
     }
 
     private func photoRestriction(_ state: CameraControlState) -> String? {
         guard state.recordingState == .stopped else { return "无法确认相机已停止录像，请检查机身。" }
         if state.isBusy == true { return "相机正在忙或写卡，请稍后再拍。" }
-        if state.rawFields["cammode"] == "playmode" { return "相机处于回放，请先返回拍摄。" }
+        if state.isPlayback == true { return "相机处于回放，请先返回拍摄。" }
         if let card = state.cardStatus?.lowercased(), ["no_card", "none", "error", "full", "write_protected"].contains(card) { return "存储卡不可写：\(card)。" }
         if state.remainingPhotos == 0 { return "相机报告没有剩余拍摄张数。" }
         return nil

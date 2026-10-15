@@ -20,9 +20,20 @@ actor CameraParameterService {
             cached = try CameraCapabilities.parse(data: reply.body)
             self.lens = lens
         }
-        guard let all = cached else { throw ResponseError.malformed }
+        guard var all = cached else { throw ResponseError.malformed }
+        var lensWarnings: [String] = []
+        if all.requiresLensApertureLimits {
+            do {
+                let lensReply = try await controls.sendExclusive(.getInfo("lens"))
+                try Task.checkCancellation()
+                all = try all.withLensApertureLimits(data: lensReply.body)
+            } catch {
+                try Task.checkCancellation()
+                lensWarnings.append("镜头光圈范围未确认：\(error.localizedDescription)")
+            }
+        }
         let current: CameraCapabilities
-        var warnings = all.diagnostics
+        var warnings = lensWarnings
         do {
             let reply = try await controls.sendExclusive(.getInfo("curmenu"))
             try Task.checkCancellation()
@@ -32,13 +43,15 @@ actor CameraParameterService {
             current = all.disablingOptions(reason: "当前模式未报告可调参数。")
             warnings.append("当前参数菜单：\(error.localizedDescription)")
         }
+        warnings += current.diagnostics
         var values: [ExposureParameter: String] = [:]
         for parameter in ExposureParameter.allCases {
             do {
                 let reply = try await controls.sendExclusive(.getSetting(parameter.commandType))
                 try Task.checkCancellation()
                 if let raw = reply.fields[parameter.commandType] ?? reply.fields["value"], !raw.isEmpty {
-                    values[parameter] = all.options(for: parameter).first(where: { $0.rawValue == raw })?.label ?? String(raw.prefix(32))
+                    values[parameter] = all.options(for: parameter).first(where: { $0.rawValue == raw })?.label ?? parameter.displayValue(for: raw) ?? "—"
+                    if values[parameter] == "—" { warnings.append("无法换算\(parameter.label)返回值：\(String(raw.prefix(64)))") }
                 }
             } catch {
                 try Task.checkCancellation()

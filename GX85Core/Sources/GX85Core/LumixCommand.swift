@@ -32,7 +32,7 @@ public enum LumixCommand: Equatable, Sendable {
             guard ["shtrspeed", "focal", "iso", "focusmode"].contains(type) else { throw ControlInputError.invalidParameter }
             items = [("mode", "getsetting"), ("type", type)]
         case let .getInfo(type):
-            guard ["allmenu", "curmenu"].contains(type) else { throw ControlInputError.invalidParameter }
+            guard ["allmenu", "curmenu", "lens"].contains(type) else { throw ControlInputError.invalidParameter }
             items = [("mode", "getinfo"), ("type", type)]
         case let .setSetting(type, value):
             guard ["shtrspeed", "focal", "iso"].contains(type), !value.isEmpty, value.utf8.count <= 64,
@@ -41,7 +41,7 @@ public enum LumixCommand: Equatable, Sendable {
             items = [("mode", "setsetting"), ("type", type), ("value", value)]
         case let .touchFocus(x, y):
             guard (0...1000).contains(x), (0...1000).contains(y) else { throw ControlInputError.invalidParameter }
-            items = [("mode", "camctrl"), ("type", "touchaf"), ("value", "\(x)/\(y)")]
+            items = [("mode", "camctrl"), ("type", "touch"), ("value", "\(x)/\(y)"), ("value2", "on")]
         }
         components.queryItems = items.map { URLQueryItem(name: $0.0, value: $0.1) }
         guard let url = components.url else { throw EndpointError.invalidAddress }
@@ -56,9 +56,9 @@ public enum LumixCommand: Equatable, Sendable {
         case .startStream: return "启动监看"
         case .stopStream: return "停止监看"
         case .capture: return "快门"
-        case .getSetting: return "读取参数"
-        case .getInfo: return "读取相机菜单"
-        case .setSetting: return "设置参数"
+        case .getSetting(let type): return "读取参数（\(type)）"
+        case .getInfo(let type): return "读取相机信息（\(type)）"
+        case .setSetting(let type, _): return "设置参数（\(type)）"
         case .autoFocus: return "单次对焦"
         case .releaseCapture: return "释放快门"
         case .videoStart: return "开始录像"

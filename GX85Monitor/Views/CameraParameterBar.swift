@@ -8,7 +8,7 @@ struct CameraParameterBar: View {
             ForEach(ExposureParameter.allCases, id: \.self) { parameter in
                 Menu {
                     let options = session.parameterOptions[parameter] ?? []
-                    if options.isEmpty { Text("相机未提供可调范围") }
+                    if options.isEmpty { Text("由机身控制或未提供调节范围") }
                     else if !options.contains(where: { $0.enabled }) { Text("当前模式由相机控制") }
                     ForEach(options) { option in
                         Button(option.label) { session.updateParameter(parameter, option: option) }

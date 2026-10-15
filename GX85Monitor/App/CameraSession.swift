@@ -510,7 +510,9 @@ final class CameraSession: ObservableObject {
                 self.parameterValues.merge(snapshot.values) { _, new in new }
                 self.parameterOptions = snapshot.options
                 let warning = snapshot.warnings.joined(separator: "；")
-                if !warning.isEmpty, warning != self.lastParameterWarning { self.diagnostics.append(warning) }
+                if !warning.isEmpty, warning != self.lastParameterWarning {
+                    for message in snapshot.warnings { self.diagnostics.append(message) }
+                }
                 self.lastParameterWarning = warning
             } catch {
                 guard self.isCurrent(current), !Task.isCancelled, self.parameterRequest == request else { return }
