@@ -81,6 +81,9 @@ private struct ParameterWheelPanel: View {
                                 .font(.callout.monospacedDigit()).foregroundStyle(.white)
                         }
                         Text("滑动停稳后自动应用").font(.caption).foregroundStyle(.secondary)
+                        #if DEBUG && targetEnvironment(simulator)
+                        if let status = session.fixtureStatus { FixtureParameterWriteBadge(model: status) }
+                        #endif
                         if let notice = session.notice {
                             Text(notice).font(.footnote).foregroundStyle(.yellow).lineLimit(3)
                         }

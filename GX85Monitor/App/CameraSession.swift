@@ -63,6 +63,9 @@ final class CameraSession: ObservableObject {
     private(set) var wantsConnection = false
     let settings: CameraSettings
     let diagnostics = DiagnosticsLog()
+    #if DEBUG && targetEnvironment(simulator)
+    var fixtureStatus: FixtureStatusModel?
+    #endif
 
     private let makeClient: ((CameraEndpoint) -> any CommandSending)?
     private let makeMediaClient: ((CameraEndpoint) async -> CameraMediaClient)?

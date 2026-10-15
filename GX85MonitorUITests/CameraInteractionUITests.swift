@@ -2,10 +2,10 @@ import XCTest
 
 final class CameraInteractionUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
-    private func launch() -> XCUIApplication {
+    private func launch(slowParameters: Bool = false) -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["--fixture-monitor"]
+        app.launchArguments = ["--fixture-monitor"] + (slowParameters ? ["--fixture-slow-parameter"] : [])
         app.launch()
         XCTAssertTrue(app.images["livePreview"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["fixtureStatus"].firstMatch.exists)
@@ -51,6 +51,25 @@ final class CameraInteractionUITests: XCTestCase {
         app.buttons["完成"].tap()
         assertNoFocus(in: app)
         XCTAssertFalse(app.staticTexts["光圈已由相机确认。"].exists)
+    }
+
+    func testLatestWheelChoiceSurvivesSlowCameraAndOpeningDoesNotWrite() {
+        let app = launch(slowParameters: true)
+        app.buttons["parameter-iso"].tap()
+        let wheel = app.pickerWheels.firstMatch
+        XCTAssertTrue(wheel.waitForExistence(timeout: 3))
+        let counter = app.staticTexts["fixtureParameterWriteCount"]
+        XCTAssertEqual(counter.label, "设置次数:0", "Opening a parameter must not write a default")
+        wheel.adjust(toPickerWheelValue: "400")
+        expectation(for: NSPredicate(format: "label == %@", "设置次数:1"), evaluatedWith: counter)
+        waitForExpectations(timeout: 3)
+        wheel.adjust(toPickerWheelValue: "100")
+        expectation(for: NSPredicate(format: "label == %@", "设置次数:2"), evaluatedWith: counter)
+        waitForExpectations(timeout: 10)
+        XCTAssertTrue(app.staticTexts["相机：100"].waitForExistence(timeout: 5))
+        XCTAssertTrue(wheel.exists)
+        app.buttons["完成"].tap()
+        assertNoFocus(in: app)
     }
 
     func testPortraitBlackBorderDoesNotSendFocus() {

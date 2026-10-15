@@ -3,10 +3,10 @@ import UIKit
 
 final class CameraPresentationUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
-    private func launch(recording: Bool = false) -> XCUIApplication {
+    private func launch(recording: Bool = false, badPreview: Bool = false) -> XCUIApplication {
         XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["--fixture-monitor"] + (recording ? ["--fixture-recording"] : [])
+        app.launchArguments = ["--fixture-monitor"] + (recording ? ["--fixture-recording"] : []) + (badPreview ? ["--fixture-bad-large-preview"] : [])
         app.launch()
         XCTAssertTrue(app.images["livePreview"].waitForExistence(timeout: 10))
         XCTAssertTrue(app.descendants(matching: .any)["fixtureStatus"].firstMatch.exists)
@@ -80,6 +80,17 @@ final class CameraPresentationUITests: XCTestCase {
         expectation(for: stopped, evaluatedWith: app.buttons["primaryShutter"])
         waitForExpectations(timeout: 4)
     }
+    func testPhotoDetailUsesThumbnailWhenLargerPreviewIsCorrupt() {
+        let app = launch(badPreview: true)
+        app.buttons["相机相册"].tap()
+        let photo = app.buttons["album-image-sim-photo"]
+        XCTAssertTrue(photo.waitForExistence(timeout: 8))
+        photo.tap()
+        XCTAssertTrue(app.images["media-preview-image"].waitForExistence(timeout: 8))
+        XCTAssertFalse(app.staticTexts["无法显示相机提供的预览图。"].exists)
+        attach(app, "portrait-preview-fallback")
+    }
+
     func testParameterMenuAndAlbumUseLabeledSimulation() {
         let app = launch()
         app.buttons["parameter-iso"].tap()

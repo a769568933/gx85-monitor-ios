@@ -6,6 +6,7 @@ import GX85Core
 @MainActor
 final class FixtureStatusModel: ObservableObject {
     @Published var focusRequests = 0
+    @Published var parameterWrites = 0
 }
 
 struct FixtureStatusBadge: View {
@@ -37,6 +38,8 @@ final class CameraDebugFixture {
         self.status = status
         let commands = FixtureCommands(recording: ProcessInfo.processInfo.arguments.contains("--fixture-recording"), onFocus: { [weak status] in
             Task { @MainActor in status?.focusRequests += 1 }
+        }, slowParameterWrites: ProcessInfo.processInfo.arguments.contains("--fixture-slow-parameter"), onParameter: { [weak status] in
+            Task { @MainActor in status?.parameterWrites += 1 }
         })
         let settings = CameraSettings(defaults: UserDefaults(suiteName: "GX85-simulator-\(UUID().uuidString)")!)
         settings.accessID = "simulator-fixture"
@@ -48,6 +51,7 @@ final class CameraDebugFixture {
             config.protocolClasses = [FixtureMediaProtocol.self]
             return CameraMediaClient(endpoint: endpoint, configuration: config)
         })
+        session.fixtureStatus = status
         session.connect()
     }
     private static func frame() -> Data {
@@ -74,12 +78,26 @@ final class CameraDebugFixture {
     }
 }
 
+struct FixtureParameterWriteBadge: View {
+    @ObservedObject var model: FixtureStatusModel
+    var body: some View {
+        Text("设置次数:\(model.parameterWrites)").font(.caption2).foregroundStyle(.yellow)
+            .accessibilityIdentifier("fixtureParameterWriteCount")
+    }
+}
+
 private actor FixtureCommands: CommandSending {
     private var recording = false
     private var playback = false
     private var values = ["iso": "100", "focal": "392/256", "shtrspeed": "1780/256", "focusmode": "afs"]
     private let onFocus: @Sendable () -> Void
-    init(recording: Bool, onFocus: @escaping @Sendable () -> Void) { self.recording = recording; self.onFocus = onFocus }
+    private let slowParameterWrites: Bool
+    private var delayedISOReadback = false
+    private let onParameter: @Sendable () -> Void
+    init(recording: Bool, onFocus: @escaping @Sendable () -> Void, slowParameterWrites: Bool = false, onParameter: @escaping @Sendable () -> Void = {}) {
+        self.recording = recording; self.onFocus = onFocus
+        self.slowParameterWrites = slowParameterWrites; self.onParameter = onParameter
+    }
     func send(_ command: LumixCommand) async throws -> LumixResponse {
         if command == .getInfo("allmenu") {
             let apertures = [392, 427, 512, 598, 683, 768, 854, 938, 1024, 1110, 1195, 1280, 1366, 1451, 1536, 1622, 1707, 1792, 1878, 1963, 2048, 2134, 2219, 2304].map { code in
@@ -97,8 +115,21 @@ private actor FixtureCommands: CommandSending {
         if command == .getInfo("curmenu") {
             return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo><photosettings><item id=\"ss\" enable=\"yes\"/><item id=\"f\" enable=\"yes\"/><item id=\"sensitivity\" enable=\"yes\"/></photosettings></menuinfo></camrply>".utf8))
         }
-        if case .getSetting(let type) = command { return LumixResponse(status: .success, fields: [type: values[type] ?? ""]) }
-        if case .setSetting(let type, let value) = command { values[type] = value }
+        if case .getSetting(let type) = command {
+            if type == "iso", delayedISOReadback {
+                delayedISOReadback = false
+                try await Task.sleep(nanoseconds: 3_800_000_000)
+            }
+            return LumixResponse(status: .success, fields: [type: values[type] ?? ""])
+        }
+        if case .setSetting(let type, let value) = command {
+            onParameter()
+            if slowParameterWrites, type == "iso", value == "400" {
+                try await Task.sleep(nanoseconds: 3_800_000_000)
+                delayedISOReadback = true
+            }
+            values[type] = value
+        }
         if case .touchFocus = command { onFocus() }
         if command == .videoStart { recording = true }
         if command == .videoStop { recording = false }
@@ -120,8 +151,14 @@ private final class FixtureMediaProtocol: URLProtocol, @unchecked Sendable {
             let xml = """
             <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:BrowseResponse xmlns:u="urn:schemas-upnp-org:service:ContentDirectory:1"><Result><![CDATA[<DIDL-Lite xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:upnp="urn:schemas-upnp-org:metadata-1-0/upnp/"><item id="sim-photo"><dc:title>SIM-PHOTO.JPG</dc:title><upnp:class>object.item.imageItem.photo</upnp:class><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_TN">http://192.168.54.1/thumb.JPG</res><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_ORG">http://192.168.54.1/photo.JPG</res></item><item id="sim-video"><dc:title>SIM-VIDEO.MP4</dc:title><upnp:class>object.item.videoItem</upnp:class><res protocolInfo="http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_LRGTN">http://192.168.54.1/poster.JPG</res></item></DIDL-Lite>]]></Result><NumberReturned>2</NumberReturned><TotalMatches>2</TotalMatches><UpdateID>simulation</UpdateID></u:BrowseResponse></s:Body></s:Envelope>
             """
-            data = Data(xml.utf8)
-        } else { data = Self.frame }
+            let content: String
+            if ProcessInfo.processInfo.arguments.contains("--fixture-bad-large-preview") {
+                content = xml.replacingOccurrences(of: "<item id=\"sim-photo\">", with: "<item id=\"sim-photo\"><res protocolInfo=\"http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_LRGTN\">http://192.168.54.1/bad.JPG</res>")
+                    .replacingOccurrences(of: "<res protocolInfo=\"http-get:*:image/jpeg:PANASONIC.COM_PN=CAM_ORG\">http://192.168.54.1/photo.JPG</res>", with: "")
+            } else { content = xml }
+            data = Data(content.utf8)
+        } else if request.url?.path == "/bad.JPG" { data = Data("invalid image".utf8) }
+        else { data = Self.frame }
         let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Length": String(data.count)])!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: data)
