@@ -12,6 +12,19 @@ public enum ExposureParameter: String, CaseIterable, Sendable {
         switch self { case .shutter: return "快门"; case .aperture: return "光圈"; case .iso: return "ISO" }
     }
 
+    /// Shutter readback can encode negative Tv as unsigned 16-bit. Keep writes unchanged.
+    public static func shutterCode(_ raw: String) -> Int? {
+        let parts = raw.trimmingCharacters(in: .whitespacesAndNewlines).split(separator: "/", omittingEmptySubsequences: false)
+        guard parts.count == 2, parts[1] == "256", let code = Int(parts[0]), (-32768...65535).contains(code) else { return nil }
+        return code > 32767 ? code - 65536 : code
+    }
+
+    public func matches(_ raw: String, _ other: String) -> Bool {
+        if raw == other { return true }
+        guard self == .shutter, let left = Self.shutterCode(raw), let right = Self.shutterCode(other) else { return false }
+        return left == right
+    }
+
     /// Lumix encodes Tv and Av in units of 1/256 stop, not literal seconds/f-numbers.
     /// This is presentation only; never replace a menu option's raw wire value.
     public func displayValue(for rawValue: String) -> String? {
@@ -23,7 +36,8 @@ public enum ExposureParameter: String, CaseIterable, Sendable {
             return String(value)
         }
         let parts = raw.split(separator: "/", omittingEmptySubsequences: false)
-        guard parts.count == 2, parts[1] == "256", let numerator = Int(parts[0]) else { return nil }
+        guard parts.count == 2, parts[1] == "256", let parsed = Int(parts[0]),
+              let numerator = self == .shutter ? Self.shutterCode(raw) : parsed else { return nil }
         if self == .shutter, numerator == 16384 { return "B" }
         let lowerBound = self == .shutter ? -2048 : -512
         guard (lowerBound...4096).contains(numerator) else { return nil }
@@ -34,13 +48,13 @@ public enum ExposureParameter: String, CaseIterable, Sendable {
             return "F" + Self.number(Self.nominal(fNumber, stops: stops))
         }
         let stops: [Double] = [1, 1.3, 1.6, 2, 2.5, 3.2, 4, 5, 6, 8, 10, 13, 15, 20, 25, 30, 40, 50, 60, 80, 100, 125, 160, 200, 250, 320, 400, 500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000, 5000, 6400, 8000, 10000, 12800, 16000, 20000, 25600, 32000, 40000, 51200, 64000]
-        if numerator <= 0 { return Self.number(Self.nominal(pow(2, -apex), stops: stops)) + "s" }
+        if numerator <= 0 { return Self.number(Self.nominal(pow(2, -apex), stops: stops, tolerance: 0.08)) + "s" }
         return "1/" + Self.number(Self.nominal(pow(2, apex), stops: stops))
     }
 
-    private static func nominal(_ value: Double, stops: [Double]) -> Double {
+    private static func nominal(_ value: Double, stops: [Double], tolerance: Double = 0.05) -> Double {
         guard let closest = stops.min(by: { abs(log($0 / value)) < abs(log($1 / value)) }),
-              abs(log(closest / value)) < 0.05 else { return value }
+              abs(log(closest / value)) < tolerance else { return value }
         return closest
     }
 
@@ -115,6 +129,19 @@ public struct CameraCapabilities: Equatable, Sendable {
             return node.children.contains(where: containsEnabledVGA)
         }
         return containsEnabledVGA(menu)
+    }
+
+    public static func liveViewQuality(currentMenu data: Data) throws -> (value: String, vgaEnabled: Bool)? {
+        let root = try BoundedCameraXML.parse(data: data, maximumSize: 2 * 1024 * 1024)
+        guard root.name == "camrply", root.children.first(where: { $0.name == "result" })?.text == "ok",
+              let info = root.children.first(where: { $0.name == "menuinfo" }) else { throw ResponseError.malformed }
+        let quality = info.descendants.filter { $0.attributes["id"] == "menu_item_id_liveview_quality" }
+        guard quality.count == 1, let value = quality.first?.attributes["value"], !value.isEmpty, value.count < 64 else { return nil }
+        func enabled(_ node: CameraXMLNode) -> Bool {
+            ["yes", "true", "1", "on"].contains(node.attributes["enable"]?.lowercased() ?? "")
+        }
+        let vga = info.descendants.filter { $0.attributes["id"] == "menu_item_id_liveviewsize_vga" }
+        return (value.lowercased(), quality.allSatisfy(enabled) && vga.count == 1 && vga.allSatisfy(enabled))
     }
 
     public static func driveMode(currentMenu data: Data) throws -> String? {

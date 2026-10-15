@@ -28,7 +28,7 @@ struct SettingsView: View {
                 Section("实时监看画质") {
                     if let pixels = session.image?.cgImage { Text("相机输出：\(pixels.width) × \(pixels.height)") }
                     else { Text("收到实时画面后显示分辨率") }
-                    Text("连接时尝试将相机的低清监看调高；保留传来画面的全部像素。Wi-Fi 实时取景是压缩预览，清晰度受相机输出限制。")
+                    Text("连接及返回相册后，尝试使用相机允许的 VGA（640 × 480）。这里显示实际源像素；放大到 iPhone 屏幕不会增加细节，清晰度受相机无线输出限制。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }
                 Section {
@@ -41,7 +41,7 @@ struct SettingsView: View {
                     }
                 }
                 Section("关于") {
-                    Text("GX85 Monitor 0.2.3（build 5）")
+                    Text("GX85 Monitor 0.2.4（build 6）")
                     Text("照片和视频先保存在相机存储卡，可在相机相册选择原文件导出到 iPhone。无线画面的清晰度与流畅度由相机输出和当前网络共同决定。")
                         .font(.footnote).foregroundStyle(.secondary)
                 }

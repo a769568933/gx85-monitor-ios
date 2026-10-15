@@ -26,50 +26,99 @@ struct CameraParameterBar: View {
             }
         }
         .sheet(item: $selection) { selected in
-            NavigationStack {
-                List {
-                    let parameter = selected.parameter
-                    let options = session.parameterOptions[parameter] ?? []
-                    if options.isEmpty {
-                        Text("当前模式由机身控制，或镜头未提供可用范围。")
+            ParameterWheelPanel(session: session, parameter: selected.parameter) { selection = nil }
+        }
+    }
+}
+
+private struct ParameterWheelPanel: View {
+    @ObservedObject var session: CameraSession
+    let parameter: ExposureParameter
+    let close: () -> Void
+    @State private var draft: String
+    @State private var pending: Task<Void, Never>?
+
+    init(session: CameraSession, parameter: ExposureParameter, close: @escaping () -> Void) {
+        self.session = session; self.parameter = parameter; self.close = close
+        let options = session.parameterOptions[parameter] ?? []
+        let initial = options.first { $0.label == session.parameterValues[parameter] } ?? options.first { $0.enabled }
+        _draft = State(initialValue: initial?.rawValue ?? "")
+    }
+    private var options: [CameraParameterOption] { session.parameterOptions[parameter] ?? [] }
+    private var enabled: [CameraParameterOption] { options.filter(\.enabled) }
+
+    var body: some View {
+        NavigationStack {
+            GeometryReader { geometry in
+                VStack(spacing: 8) {
+                    if enabled.isEmpty {
+                        Spacer()
+                        Text("当前参数由机身控制，或镜头未提供可用范围。")
+                            .foregroundStyle(.secondary).multilineTextAlignment(.center)
+                        Text("请切换至允许调节的模式；M 档可调快门和光圈。")
                             .font(.footnote).foregroundStyle(.secondary)
+                        Spacer()
                     } else {
-                        if !options.contains(where: { $0.enabled }) {
-                            Text("当前模式由机身自动控制。请切换到 M 档；快门也可在 S 档调节。")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
-                        ForEach(options) { option in
-                            Button {
-                                session.updateParameter(parameter, option: option)
-                                selection = nil
-                            } label: {
-                                HStack {
-                                    Text(option.label).font(.body.monospacedDigit())
-                                    Spacer(minLength: 16)
-                                    if session.parameterValues[parameter] == option.label {
-                                        Image(systemName: "checkmark").foregroundStyle(.yellow)
-                                    }
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-                                .contentShape(Rectangle())
+                        Picker(parameter.label, selection: $draft) {
+                            ForEach(enabled) { option in
+                                Text(option.label)
+                                    .font(.system(size: option.rawValue == draft ? 28 : 22, weight: option.rawValue == draft ? .bold : .regular, design: .rounded).monospacedDigit())
+                                    .foregroundStyle(option.rawValue == draft ? Color.yellow : Color.white.opacity(0.55))
+                                    .tag(option.rawValue)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(!option.enabled || session.actionInProgress || !session.isActive)
-                            .accessibilityLabel(option.label)
                         }
-                        if parameter == .shutter {
-                            Text("机械快门与电子快门支持的速度范围不同，以机身确认值为准。")
-                                .font(.footnote).foregroundStyle(.secondary)
+                        .pickerStyle(.wheel).labelsHidden()
+                        .frame(height: max(96, min(216, geometry.size.height - 110)))
+                        .clipped()
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10).stroke(.yellow.opacity(0.7), lineWidth: 1)
+                                .frame(height: 40).allowsHitTesting(false)
                         }
+                        .accessibilityIdentifier("parameter-wheel")
+                        HStack(spacing: 8) {
+                            if session.actionInProgress { ProgressView().controlSize(.small) }
+                            Text("相机：\(session.parameterValues[parameter] ?? "—")")
+                                .font(.callout.monospacedDigit()).foregroundStyle(.white)
+                        }
+                        Text("滑动停稳后自动应用").font(.caption).foregroundStyle(.secondary)
+                        if let notice = session.notice {
+                            Text(notice).font(.footnote).foregroundStyle(.yellow).lineLimit(3)
+                        }
+                        Spacer(minLength: 0)
                     }
                 }
-                .accessibilityIdentifier("parameter-options")
-                .navigationTitle(selected.parameter.label).navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { selection = nil } } }
+                .frame(maxWidth: .infinity).padding(.horizontal, 20)
             }
-            .preferredColorScheme(.dark)
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
+            .navigationTitle(parameter.label).navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成", action: close) } }
+        }
+        .preferredColorScheme(.dark)
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .onChange(of: draft) { value in applyAfterSettling(value) }
+        .onDisappear { pending?.cancel(); pending = nil }
+    }
+
+    private func applyAfterSettling(_ value: String) {
+        pending?.cancel()
+        pending = Task { @MainActor in
+            do {
+                try await Task.sleep(nanoseconds: 350_000_000)
+                // Retain only the latest settled choice while a previous write finishes.
+                for _ in 0..<100 where session.actionInProgress {
+                    try await Task.sleep(nanoseconds: 50_000_000)
+                }
+                try Task.checkCancellation()
+                guard draft == value, session.isActive,
+                      let option = enabled.first(where: { $0.rawValue == value }) else { return }
+                guard !session.actionInProgress else {
+                    session.showNotice("当前操作尚未完成，请稍后再滑动选择。")
+                    return
+                }
+                if session.parameterValues[parameter] != option.label {
+                    session.updateParameter(parameter, option: option)
+                }
+            } catch { }
         }
     }
 }

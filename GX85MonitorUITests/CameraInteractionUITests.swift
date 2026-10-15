@@ -3,6 +3,7 @@ import XCTest
 final class CameraInteractionUITests: XCTestCase {
     override func setUpWithError() throws { continueAfterFailure = false }
     private func launch() -> XCUIApplication {
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
         app.launchArguments = ["--fixture-monitor"]
         app.launch()
@@ -54,7 +55,9 @@ final class CameraInteractionUITests: XCTestCase {
 
     func testPortraitBlackBorderDoesNotSendFocus() {
         let app = launch()
-        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()
+        expectation(for: NSPredicate { _, _ in app.windows.firstMatch.frame.height > app.windows.firstMatch.frame.width }, evaluatedWith: app.windows.firstMatch)
+        waitForExpectations(timeout: 5)
+        app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).tap()
         assertNoFocus(in: app)
     }
 

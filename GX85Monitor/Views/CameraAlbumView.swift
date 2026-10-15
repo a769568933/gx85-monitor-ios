@@ -40,14 +40,9 @@ struct CameraAlbumView: View {
                             ForEach(model.items) { item in
                                 VStack(spacing: 4) {
                                     ZStack(alignment: .topTrailing) {
-                                        Button {
+                                        AlbumThumbnail(item: item, loader: thumbnails) {
                                             if item.isContainer { model.enter(item) } else { preview = item }
-                                        } label: {
-                                            AlbumThumbnail(item: item, loader: thumbnails).aspectRatio(1, contentMode: .fit)
-                                                .overlay(alignment: .bottomLeading) {
-                                                    if item.kind == .video { Image(systemName: "video.fill").padding(6).foregroundStyle(.white) }
-                                                }
-                                        }.buttonStyle(.plain)
+                                        }.aspectRatio(1, contentMode: .fit)
                                         if !item.isContainer {
                                             Button { model.toggleSelection(item) } label: {
                                                 Image(systemName: model.selection.contains(item.id) ? "checkmark.circle.fill" : "circle")
@@ -98,22 +93,56 @@ struct CameraAlbumView: View {
 private struct AlbumThumbnail: View {
     let item: CameraMediaItem
     @ObservedObject var loader: CameraThumbnailLoader
+    let open: () -> Void
     @State private var image: UIImage?
+    @State private var loading = false
+    @State private var attempt = 0
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                Color.gray.opacity(0.15)
-                if item.isContainer { Image(systemName: "folder.fill").font(.largeTitle).foregroundStyle(.blue) }
-                else if let image { Image(uiImage: image).resizable().scaledToFill().frame(width: geometry.size.width, height: geometry.size.height).clipped() }
-                else { Image(systemName: item.kind == .video ? "video" : "photo").foregroundStyle(.secondary) }
+                Button(action: open) {
+                    ZStack(alignment: .bottomLeading) {
+                        Color.gray.opacity(0.15)
+                        if item.isContainer {
+                            Image(systemName: "folder.fill").font(.largeTitle).foregroundStyle(.blue)
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else if let image {
+                            Image(uiImage: image).resizable().scaledToFill()
+                                .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                        } else {
+                            Image(systemName: item.kind == .video ? "video" : "photo")
+                                .foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                        if item.kind == .video { Image(systemName: "video.fill").padding(6).foregroundStyle(.white) }
+                    }
+                    .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("预览 \(item.title)")
+                .accessibilityValue(image == nil ? "未载入" : "已载入")
+                .accessibilityIdentifier(image == nil ? "album-placeholder-\(item.id)" : "album-image-\(item.id)")
+                if loading { ProgressView().tint(.white).allowsHitTesting(false) }
+                else if image == nil, !item.isContainer {
+                    if item.thumbnailCandidates.isEmpty {
+                        Text("相机未提供预览图").font(.caption2).foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom).padding(.bottom, 5)
+                            .allowsHitTesting(false)
+                    } else {
+                        Button("重试") { attempt += 1 }
+                            .font(.caption).foregroundStyle(.yellow).frame(minWidth: 44, minHeight: 44)
+                            .background(.black.opacity(0.7), in: Capsule())
+                            .accessibilityLabel("重试缩略图 \(item.title)")
+                    }
+                }
             }
         }
-        .task(id: item.thumbnailResource?.url) {
-            guard let resource = item.thumbnailResource else { return }
-            let result = await loader.load(resource)
+        .task(id: "\(item.id)-\(attempt)") {
+            guard !item.isContainer else { return }
+            loading = true
+            let result = await loader.load(item)
             guard !Task.isCancelled else { return }
-            image = result
+            image = result; loading = false
         }
-        .onDisappear { image = nil }
+        .onDisappear { image = nil; loading = false }
     }
 }

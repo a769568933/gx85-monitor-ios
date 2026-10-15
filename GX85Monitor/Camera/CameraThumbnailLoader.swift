@@ -15,6 +15,14 @@ final class CameraThumbnailLoader: ObservableObject {
     private let budget = 32 * 1024 * 1024
     init(client: CameraMediaClient) { self.client = client; cache.totalCostLimit = budget }
 
+    func load(_ item: CameraMediaItem) async -> UIImage? {
+        for resource in item.thumbnailCandidates {
+            guard !Task.isCancelled else { return nil }
+            if let image = await load(resource) { return image }
+        }
+        return nil
+    }
+
     func load(_ resource: CameraMediaResource) async -> UIImage? {
         let key = resource.url.absoluteString
         if let image = cache.object(forKey: key as NSString) {
@@ -23,11 +31,19 @@ final class CameraThumbnailLoader: ObservableObject {
         }
         let current = epoch
         do {
-            let data = try await client.imageData(resource)
+            if let size = resource.size, size > 4 * 1024 * 1024 {
+                await client.reportImageFailure(resource, reason: "图片超过缩略图传输上限")
+                return nil
+            }
+            let data = try await client.imageData(resource, maximumSize: 4 * 1024 * 1024)
             try Task.checkCancellation()
             let image = await Task.detached(priority: .utility) { CameraImageDecode.image(data: data, maximumPixelSize: 320) }.value
             try Task.checkCancellation()
-            guard current == epoch, let image, let cg = image.cgImage else { return nil }
+            guard current == epoch else { return nil }
+            guard let image, let cg = image.cgImage else {
+                await client.reportImageFailure(resource, reason: "无法解码图片，字节=\(data.count)")
+                return nil
+            }
             let cost = cg.bytesPerRow * cg.height
             guard cost <= budget else { return nil }
             if let old = costs.removeValue(forKey: key) { totalCost -= old; order.removeAll { $0 == key } }

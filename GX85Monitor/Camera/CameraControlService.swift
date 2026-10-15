@@ -107,8 +107,7 @@ actor CameraControlService {
             guard drive == "normal" else { return false }
             let setting = try await send(.getSetting("shtrspeed"))
             guard let raw = setting.fields["shtrspeed"] ?? setting.fields["value"] else { return false }
-            let parts = raw.split(separator: "/", omittingEmptySubsequences: false)
-            guard parts.count == 2, parts[1] == "256", let numerator = Int(parts[0]), (-2048...4096).contains(numerator) else {
+            guard let numerator = ExposureParameter.shutterCode(raw), (-2048...4096).contains(numerator) else {
                 log("快门为长按或未知编码：\(String(raw.prefix(64)))；保留释放步骤。")
                 return false
             }
@@ -125,23 +124,43 @@ actor CameraControlService {
     }
 
     func prepareLiveViewQuality() async throws {
-        try await transaction {
+        try await transaction { try await self.prepareLiveViewQualityUnlocked() }
+    }
+
+    private func prepareLiveViewQualityUnlocked() async throws {
+        do {
+            var current: (value: String, vgaEnabled: Bool)?
             do {
-                let menu = try await self.send(.getInfo("allmenu"))
+                let menu = try await send(.getInfo("curmenu"))
+                current = try CameraCapabilities.liveViewQuality(currentMenu: menu.body)
+            } catch CommandError.cameraRejected { } catch ResponseError.malformed { }
+            let size: String
+            if let current {
+                log("当前菜单监看：\(current.value)，VGA 可用=\(current.vgaEnabled)。")
+                guard current.vgaEnabled else { return }
+                size = current.value
+            } else {
+                let menu = try await send(.getInfo("allmenu"))
                 guard try CameraCapabilities.supportsVGALiveView(menu: menu.body) else { return }
-                let reply = try await self.send(.getSetting("liveviewsize"))
-                let size = reply.fields["liveviewsize"] ?? reply.fields["value"] ?? ""
-                self.log("相机监看设置：\(size.prefix(64))；以实际帧分辨率为准。")
-                guard size == "qvga" else { return }
-                let state = try await self.readStateUnlocked()
-                guard state.recordingState == .stopped, state.isBusy != true else { return }
-                _ = try await self.send(.setSetting(type: "liveviewsize", value: "vga"))
-                let actual = try await self.send(.getSetting("liveviewsize"))
-                self.log("已请求 VGA 监看；回读=\(actual.fields["liveviewsize"] ?? actual.fields["value"] ?? "未知")；等待实际画面确认。")
-            } catch {
-                try Task.checkCancellation()
-                self.log("可选监看画质设置不可用：\(error.localizedDescription)；保留相机现有输出。")
+                let reply = try await send(.getSetting("liveviewsize"))
+                size = reply.fields["liveviewsize"] ?? reply.fields["value"] ?? ""
             }
+            guard size == "qvga" else { return }
+            let state = try await readStateUnlocked()
+            guard state.recordingState == .stopped, state.isBusy != true else { return }
+            _ = try await send(.setSetting(type: "liveviewsize", value: "vga"))
+            let actual: String
+            if current != nil {
+                let menu = try await send(.getInfo("curmenu"))
+                actual = try CameraCapabilities.liveViewQuality(currentMenu: menu.body)?.value ?? "未知"
+            } else {
+                let reply = try await send(.getSetting("liveviewsize"))
+                actual = reply.fields["liveviewsize"] ?? reply.fields["value"] ?? "未知"
+            }
+            log("已请求 VGA 监看；回读=\(actual)；以实际收到的帧像素为准。")
+        } catch {
+            try Task.checkCancellation()
+            log("可选监看画质设置不可用：\(error.localizedDescription)；保留相机现有输出。")
         }
     }
 
@@ -175,7 +194,8 @@ actor CameraControlService {
         try await transaction {
             _ = try await self.send(.setSetting(type: parameter.commandType, value: rawValue))
             let actual = try await self.send(.getSetting(parameter.commandType))
-            guard (actual.fields[parameter.commandType] ?? actual.fields["value"]) == rawValue else { throw CameraControlError.unconfirmed }
+            guard let readback = actual.fields[parameter.commandType] ?? actual.fields["value"],
+                  parameter.matches(readback, rawValue) else { throw CameraControlError.unconfirmed }
         }
     }
 
@@ -213,6 +233,7 @@ actor CameraControlService {
                 }
                 guard restored else { throw CameraControlError.unconfirmed }
             }
+            if state.recordingState == .stopped { try await self.prepareLiveViewQualityUnlocked() }
             _ = try await self.send(.startStream(port: port))
             return state
         }

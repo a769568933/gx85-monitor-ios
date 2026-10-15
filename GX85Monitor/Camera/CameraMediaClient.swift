@@ -14,6 +14,7 @@ actor CameraMediaClient: CameraMediaBrowsing {
     private let imageGate = CameraPermitPool(limit: 3)
     private var service: ContentDirectoryService?
     private var catalogs: [String: (total: Int, updateID: String?)] = [:]
+    private var imageFailures = Set<String>()
     private let log: @Sendable (String) -> Void
 
     init(endpoint: CameraEndpoint, descriptionURL: URL? = nil, configuration: URLSessionConfiguration = .ephemeral,
@@ -72,7 +73,7 @@ actor CameraMediaClient: CameraMediaBrowsing {
         request.setValue("\"\(resolved.serviceType)#Browse\"", forHTTPHeaderField: "SOAPAction")
         let body = """
         <?xml version="1.0" encoding="utf-8"?>
-        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:Browse xmlns:u="\(resolved.serviceType)"><ObjectID>\(Self.escape(objectID))</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>\(start)</StartingIndex><RequestedCount>\(count)</RequestedCount><SortCriteria></SortCriteria></u:Browse></s:Body></s:Envelope>
+        <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" xmlns:pana="urn:schemas-panasonic-com:pana"><s:Body><u:Browse xmlns:u="\(resolved.serviceType)"><ObjectID>\(Self.escape(objectID))</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>\(start)</StartingIndex><RequestedCount>\(count)</RequestedCount><SortCriteria></SortCriteria><pana:X_FromCP>LumixLink2.0</pana:X_FromCP></u:Browse></s:Body></s:Envelope>
         """
         request.httpBody = Data(body.utf8)
         log("相册请求：目录=\(objectID.prefix(64))，起点=\(start)，数量=\(count)")
@@ -83,6 +84,9 @@ actor CameraMediaClient: CameraMediaBrowsing {
             try Task.checkCancellation()
             let page = try ContentDirectoryReply.parse(data: data, cameraHost: cameraHost, startingIndex: start)
             log("相册回复：起点=\(start)，返回=\(page.numberReturned)，总数=\(page.totalMatches)，更新=\(page.updateID ?? "无")，字节=\(data.count)")
+            for item in page.items.prefix(2) {
+                log("相册资源 \(item.id.prefix(64))：" + item.resources.prefix(6).map { "\($0.role)/\($0.mimeType)/\($0.url.path.suffix(80))" }.joined(separator: "，"))
+            }
             return page
         } catch {
             log("相册分页失败：起点=\(start)，数量=\(count)，字节=\(replyBytes)，原因=\(String(describing: error).prefix(300))")
@@ -96,7 +100,20 @@ actor CameraMediaClient: CameraMediaBrowsing {
         try await imageGate.acquire()
         defer { Task { await imageGate.release() } }
         try Task.checkCancellation()
-        return try await CameraHTTPReader.data(for: URLRequest(url: url), session: session, cameraHost: cameraHost, limit: maximumSize)
+        do {
+            let data = try await CameraHTTPReader.data(for: URLRequest(url: url), session: session, cameraHost: cameraHost, limit: maximumSize)
+            return data
+        } catch {
+            if !Task.isCancelled { reportImageFailure(resource, reason: error.localizedDescription) }
+            throw error
+        }
+    }
+
+    func reportImageFailure(_ resource: CameraMediaResource, reason: String) {
+        let key = resource.url.absoluteString + String(reason.prefix(160))
+        guard imageFailures.insert(key).inserted else { return }
+        if imageFailures.count > 128 { imageFailures = [key] }
+        log("相册图片失败：\(resource.role)/\(resource.mimeType)，路径=\(resource.url.path.suffix(100))，原因=\(reason.prefix(160))")
     }
 
     private func resolveService() async throws -> ContentDirectoryService {

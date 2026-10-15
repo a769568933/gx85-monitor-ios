@@ -92,7 +92,7 @@ final class CameraPresentationUITests: XCTestCase {
         app.buttons["相机相册"].tap()
         XCTAssertTrue(app.staticTexts["模拟相册 · 非相机连接"].waitForExistence(timeout: 8))
         XCTAssertTrue(app.staticTexts["SIM-PHOTO.JPG"].waitForExistence(timeout: 4))
-        XCTAssertTrue(app.images["album-image-sim-photo"].waitForExistence(timeout: 8), "The cell must contain decoded image pixels")
+        XCTAssertTrue(app.buttons["album-image-sim-photo"].waitForExistence(timeout: 8), "The cell must contain decoded image pixels")
         app.buttons["选择 SIM-PHOTO.JPG"].tap()
         XCTAssertTrue(app.buttons["导出原文件"].isEnabled)
         attach(app, "portrait-camera-album")

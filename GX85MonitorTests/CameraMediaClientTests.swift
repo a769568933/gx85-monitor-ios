@@ -38,7 +38,8 @@ final class CameraMediaClientTests: XCTestCase {
 
     @MainActor
     func testStandardDLNAThumbnailDecodesWithoutBecomingAnOriginal() async throws {
-        let jpeg = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 24)).jpegData(withCompressionQuality: 0.9) { context in
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let jpeg = UIGraphicsImageRenderer(size: CGSize(width: 32, height: 24), format: format).jpegData(withCompressionQuality: 0.9) { context in
             UIColor.orange.setFill(); context.fill(CGRect(x: 0, y: 0, width: 32, height: 24))
         }
         let response = Data("<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:BrowseResponse xmlns:u=\"urn:schemas-upnp-org:service:ContentDirectory:1\"><Result><![CDATA[<DIDL-Lite><item id=\"photo\"><res protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_TN\">http://192.168.54.1/TN.JPG</res><res protocolInfo=\"http-get:*:image/jpeg:DLNA.ORG_PN=JPEG_LRG\">http://192.168.54.1/LRG.JPG</res></item></DIDL-Lite>]]></Result><NumberReturned>1</NumberReturned><TotalMatches>1</TotalMatches></u:BrowseResponse></s:Body></s:Envelope>".utf8)
@@ -54,6 +55,27 @@ final class CameraMediaClientTests: XCTestCase {
         XCTAssertEqual(image?.cgImage?.width, 32)
         XCTAssertEqual(image?.cgImage?.height, 24)
         XCTAssertEqual(MediaStubProtocol.requests.last?.url?.path, "/TN.JPG")
+    }
+
+    @MainActor
+    func testFailedThumbnailFallsBackToJPEGPreviewAndLogsDecodeFailure() async throws {
+        let format = UIGraphicsImageRendererFormat(); format.scale = 1
+        let jpeg = UIGraphicsImageRenderer(size: CGSize(width: 24, height: 16), format: format).jpegData(withCompressionQuality: 0.9) { context in
+            UIColor.blue.setFill(); context.fill(CGRect(x: 0, y: 0, width: 24, height: 16))
+        }
+        let messages = MediaMessages()
+        MediaStubProtocol.set { request in request.url?.path == "/bad.JPG" ? Data("not a JPEG".utf8) : jpeg }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MediaStubProtocol.self]
+        let camera = CameraMediaClient(endpoint: try CameraEndpoint(host: "192.168.54.1"), configuration: config, log: { messages.append($0) })
+        let bad = CameraMediaResource(url: URL(string: "http://192.168.54.1/bad.JPG")!, mimeType: "image/jpeg", role: .thumbnail)
+        let preview = CameraMediaResource(url: URL(string: "http://192.168.54.1/good.JPG")!, mimeType: "image/jpeg", role: .preview)
+        let item = CameraMediaItem(id: "photo", title: "photo", kind: .photo, resources: [bad, preview])
+        let image = await CameraThumbnailLoader(client: camera).load(item)
+        XCTAssertEqual(image?.cgImage?.width, 24)
+        XCTAssertEqual(MediaStubProtocol.requests.map { $0.url?.path }, ["/bad.JPG", "/good.JPG"])
+        XCTAssertTrue(messages.values.contains { $0.contains("无法解码") && $0.contains("bad.JPG") })
+        XCTAssertNil(item.originalResource)
     }
 
     func testUnknownJPEGCanBePreviewedButCannotBeExported() throws {
@@ -234,4 +256,11 @@ private final class MediaStubProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() { }
+}
+
+private final class MediaMessages: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [String] = []
+    var values: [String] { lock.withLock { stored } }
+    func append(_ message: String) { lock.withLock { stored.append(message) } }
 }

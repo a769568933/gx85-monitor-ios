@@ -9,8 +9,8 @@
     <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
     <key>CFBundleName</key><string>$(PRODUCT_NAME)</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.2.3</string>
-    <key>CFBundleVersion</key><string>5</string>
+    <key>CFBundleShortVersionString</key><string>0.2.4</string>
+    <key>CFBundleVersion</key><string>6</string>
     <key>LSRequiresIPhoneOS</key><true/>
     <key>NSLocalNetworkUsageDescription</key><string>连接你的 GX85，接收实时取景画面并发送拍照指令。</string>
     <key>NSPhotoLibraryAddUsageDescription</key><string>将你选择的 GX85 照片和视频保存到 iPhone。</string>

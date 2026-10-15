@@ -3,6 +3,22 @@ import XCTest
 @testable import GX85Core
 
 final class CameraCapabilitiesTests: XCTestCase {
+    func testCurrentMenuQualityDoesNotOverrideDisabledVGA() throws {
+        let xml = "<camrply><result>ok</result><menuinfo><mainmenu><item id=\"menu_item_id_liveview_quality\" enable=\"yes\" value=\"qvga\"/><item id=\"menu_item_id_liveviewsize_vga\" enable=\"no\"/></mainmenu></menuinfo></camrply>"
+        let quality = try CameraCapabilities.liveViewQuality(currentMenu: Data(xml.utf8))
+        XCTAssertEqual(quality?.value, "qvga")
+        XCTAssertEqual(quality?.vgaEnabled, false)
+    }
+
+    func testUnsignedShutterCodesAreEquivalentOnlyToTheirSignedValue() {
+        XCTAssertTrue(ExposureParameter.shutter.matches("64000/256", "-1536/256"))
+        XCTAssertFalse(ExposureParameter.shutter.matches("64000/256", "-1365/256"))
+        XCTAssertNil(ExposureParameter.shutterCode("129536/256"))
+        XCTAssertNil(ExposureParameter.shutterCode("64000/128"))
+        XCTAssertEqual(ExposureParameter.shutter.displayValue(for: "64000/256"), "60s")
+        XCTAssertFalse(ExposureParameter.aperture.matches("64000/256", "-1536/256"))
+    }
+
     // Synthetic protocol fixture using Lumix menuset item attributes; not a captured GX85 reply.
     private let menu = """
     <camrply><result>ok</result><menuset model="DMC-GX85" version="1">

@@ -27,9 +27,16 @@ public struct CameraMediaItem: Identifiable, Equatable, Sendable {
         return resources.first { $0.role == .original }
     }
     public var thumbnailResource: CameraMediaResource? {
-        resources.first { $0.role == .thumbnail && $0.mimeType.hasPrefix("image/") }
-            ?? resources.first { $0.role == .preview && $0.mimeType == "image/jpeg" }
-            ?? resources.first { $0.role == .original && $0.mimeType == "image/jpeg" }
+        thumbnailCandidates.first
+    }
+    public var thumbnailCandidates: [CameraMediaResource] {
+        guard !isContainer else { return [] }
+        let candidates = resources.filter { $0.role == .thumbnail && $0.mimeType.hasPrefix("image/") }
+            + resources.filter { $0.role == .preview && $0.mimeType == "image/jpeg" }
+            + resources.filter { $0.role == .original && $0.mimeType == "image/jpeg" }
+            + resources.filter { $0.role == .unknown && $0.mimeType == "image/jpeg" }
+        var seen = Set<URL>()
+        return candidates.filter { seen.insert($0.url).inserted }.prefix(4).map { $0 }
     }
     public var imagePreviewResource: CameraMediaResource? {
         resources.first { $0.role == .preview && $0.mimeType == "image/jpeg" }

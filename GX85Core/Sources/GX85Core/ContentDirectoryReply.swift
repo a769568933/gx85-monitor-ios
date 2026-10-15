@@ -37,24 +37,33 @@ public enum ContentDirectoryReply {
                 guard let contentType = content.first, !contentType.isEmpty else { throw CameraMediaError.invalidDirectoryField("item=\(id.prefix(64)) MIME") }
                 var mime = String(contentType).lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
                 let attributes = (content.count == 2 ? String(content[1]) : "") + ";" + (parts.count == 4 ? String(parts[3]) : "")
-                let profile = attributes.split(separator: ";").compactMap { token -> String? in
+                func profileValue(_ name: String) -> String? { attributes.split(separator: ";").compactMap { token -> String? in
                     let pair = token.split(separator: "=", maxSplits: 1)
-                    guard pair.count == 2, pair[0].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == "PANASONIC.COM_PN" else { return nil }
+                    guard pair.count == 2, pair[0].trimmingCharacters(in: .whitespacesAndNewlines).uppercased() == name else { return nil }
                     return pair[1].trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-                }.first
+                }.first }
+                let profile = profileValue("PANASONIC.COM_PN")
+                let dlna = profileValue("DLNA.ORG_PN")
                 // Some Lumix RAW entries omit the fourth colon and place the
                 // Panasonic profile after the MIME's semicolon instead.
                 guard parts.count == 4 || profile != nil else { throw CameraMediaError.invalidDirectoryField("item=\(id.prefix(64)) missing protocol metadata") }
                 if mime == "application/octet-stream" {
                     if profile == "CAM_RAW" { mime = "image/x-panasonic-rw2" }
-                    else if profile == "CAM_RAW_JPG" { mime = "image/jpeg" }
+                    else if ["CAM_RAW_JPG", "CAM_TN", "CAM_LRGTN", "CAM_ORG"].contains(profile ?? "") { mime = "image/jpeg" }
+                    else if profile == "CAM_AVC_MP4" { mime = "video/mp4" }
+                    else if ["JPEG_TN", "JPEG_SM", "JPEG_MED", "JPEG_LRG"].contains(dlna ?? "") { mime = "image/jpeg" }
                 }
                 let role: CameraMediaResource.Role
                 switch profile {
                 case "CAM_ORG", "CAM_AVC_MP4", "CAM_RAW": role = .original
                 case "CAM_LRGTN", "CAM_RAW_JPG": role = .preview
                 case "CAM_TN": role = .thumbnail
-                default: role = .unknown
+                default:
+                    switch dlna {
+                    case "JPEG_TN": role = .thumbnail
+                    case "JPEG_SM", "JPEG_MED", "JPEG_LRG": role = .preview
+                    default: role = .unknown
+                    }
                 }
                 let size: Int64?
                 if let raw = resource.attributes["size"] {

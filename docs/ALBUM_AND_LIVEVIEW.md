@@ -1,4 +1,4 @@
-# GX85 album and live-view compatibility — 0.2.3
+# GX85 album and live-view compatibility — 0.2.4
 
 ## Field report and investigation
 
@@ -90,3 +90,37 @@ and uncertain-operation errors remain visible.
 
 These references identify compatible protocol forms; they do not substitute for
 the user's missing failing SOAP response or physical GX85 validation.
+
+
+## 0.2.4 field report (15 October 2026)
+
+The supplied 0.2.3 log confirms QVGA source frames (320×240) and an MC262 current
+menu with liveview_quality=qvga, liveviewsize_vga enabled. Reading the setting by
+getsetting is optional; current-menu metadata must also drive upgrading and
+verification, including after returning from playback. VGA is the highest mode
+explicitly reported in this attachment; it does not establish an HD mode or the
+ability to match an iPhone display's native pixel count. Preserve every received
+source pixel and report actual frame size, without claiming upscaling adds detail.
+
+The same log confirms 40 catalog items out of 1,356 but contains neither their
+resource metadata nor image HTTP/decode failures. Therefore the specific cause
+of the missing thumbnails is not proven. Include Panasonic's X_FromCP=LumixLink2.0
+in SOAP Browse (as used by libgphoto2), accept DLNA JPEG_TN/SM/MED/LRG as display
+resources, and permit bounded JPEG fallback without treating previews as originals.
+Log representative resource roles and bounded loading failures; expose retry.
+
+Exposure interaction: use a native wheel, emphasize the center row, debounce
+changes until scrolling settles, and apply without an additional tap. Opening or
+closing a picker must not itself submit a new value. Confirmed body readings remain
+separate from the tentative wheel value. Coalesce intermediate choices while one
+write is active; dismiss cancels unsent changes. Keep error notices visible in the
+panel and retain quiet success elsewhere.
+
+The log also contains shutter readbacks 64171/256 and 64000/256, which represent
+signed 16-bit values -1365/256 (40 seconds) and -1536/256 (60 seconds). Normalize
+these equivalents for display, confirmation and finite-single exposure detection;
+retain menu-provided wire values for writes. Do not infer unsupported lens CSV
+fields as shutter bounds.
+
+Automated tests and simulator images use clearly labeled fixtures. Successful
+CI does not certify the physical camera's delivered resolution or file generation.
