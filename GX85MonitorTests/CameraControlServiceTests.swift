@@ -65,6 +65,7 @@ final class CameraControlServiceTests: XCTestCase {
             _ = await service(camera).capturePhoto()
             let calls = await camera.calls
             XCTAssertFalse(calls.contains(.autoFocus))
+            XCTAssertFalse(calls.contains(.getSetting("focusmode")))
             XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
             XCTAssertFalse(calls.contains { if case .setSetting(type: "focusmode", value: _) = $0 { return true }; return false })
         }

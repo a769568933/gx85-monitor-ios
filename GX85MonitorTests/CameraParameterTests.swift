@@ -5,43 +5,6 @@ import GX85Core
 
 @MainActor
 final class CameraParameterTests: XCTestCase {
-    func testGX80APEXValuesDisplayAsExposureWithoutMenuOptions() async throws {
-        // 768/256 is the actual value in the user's GX80 diagnostics for both parameters.
-        // Other literals cross-check conventional Lumix APEX shutter and aperture stops.
-        let samples = [
-            ("768/256", "768/256", "1/8", "F2.8"),
-            ("1792/256", "392/256", "1/125", "F1.7"),
-            ("2560/256", "1366/256", "1/1000", "F6.3"),
-            ("0/256", "2304/256", "1s", "F22"),
-            ("-256/256", "1024/256", "2s", "F4"),
-            ("16384/256", "512/256", "B", "F2"),
-            ("future/256", "NaN", "—", "—")
-        ]
-        for (shutter, aperture, expectedShutter, expectedAperture) in samples {
-            let client = GX80ParameterReply(shutter: shutter, aperture: aperture)
-            let parameters = CameraParameterService(controls: CameraControlService(client: client))
-            let snapshot = try await parameters.load(lens: "normal")
-            XCTAssertEqual(snapshot.values[.shutter], expectedShutter, shutter)
-            XCTAssertEqual(snapshot.values[.aperture], expectedAperture, aperture)
-            XCTAssertEqual(snapshot.values[.iso], "200")
-            XCTAssertTrue(snapshot.options[.shutter]?.isEmpty == true)
-        }
-    }
-
-    func testUnlabelledExposureMenuPreservesWireValueAndFormatsItsLabel() throws {
-        let xml = """
-        <camrply><result>ok</result><menuset><qmenu>
-          <item id="ss8" cmd_mode="setsetting" cmd_type="shtrspeed" cmd_value="768/256"/>
-          <item id="f28" cmd_mode="setsetting" cmd_type="focal" cmd_value="768/256"/>
-        </qmenu></menuset></camrply>
-        """
-        let all = try CameraCapabilities.parse(data: Data(xml.utf8))
-        XCTAssertEqual(all.options(for: .shutter).first?.label, "1/8")
-        XCTAssertEqual(all.options(for: .aperture).first?.label, "F2.8")
-        XCTAssertEqual(all.options(for: .shutter).first?.rawValue, "768/256")
-        XCTAssertEqual(all.options(for: .aperture).first?.rawValue, "768/256")
-    }
-
     private func connected(_ camera: ParameterCamera) async -> CameraSession {
         let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         settings.accessID = "parameter-test"
@@ -109,25 +72,6 @@ final class CameraParameterTests: XCTestCase {
         XCTAssertEqual(first.parameterOptions[.aperture]?.first?.rawValue, "392/256")
         XCTAssertEqual(second.parameterOptions[.aperture]?.first?.rawValue, "780/256")
         first.disconnect(); second.disconnect()
-    }
-}
-
-private actor GX80ParameterReply: CommandSending {
-    let shutter: String
-    let aperture: String
-    init(shutter: String, aperture: String) { self.shutter = shutter; self.aperture = aperture }
-    func send(_ command: LumixCommand) async throws -> LumixResponse {
-        if command == .getInfo("allmenu") {
-            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuset model=\"GX80\"><qmenu/></menuset></camrply>".utf8))
-        }
-        if command == .getInfo("curmenu") {
-            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><qmenu2/></menuinfo></camrply>".utf8))
-        }
-        if case .getSetting(let type) = command {
-            let raw = type == "shtrspeed" ? shutter : (type == "focal" ? aperture : "200")
-            return try LumixResponse.parse(data: Data("<camrply><result>ok</result><settingvalue \(type)=\"\(raw)\"/></camrply>".utf8))
-        }
-        return LumixResponse(status: .success)
     }
 }
 

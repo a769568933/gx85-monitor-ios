@@ -47,27 +47,25 @@ actor CameraControlService {
                 var pressed = false
                 var releaseAttempted = false
                 var accepted = false
+                var stage = "拍前状态"
                 do {
                     let state = try await self.readStateUnlocked()
                     if let reason = self.photoRestriction(state) { return .rejected(reason) }
-                    let focus: String
-                    do {
-                        let response = try await self.send(.getSetting("focusmode"))
-                        focus = (response.fields["focusmode"] ?? response.fields["value"] ?? "").lowercased()
-                    } catch CommandError.cameraRejected {
-                        // A camera that does not expose focusmode keeps its own focus priority.
-                        focus = ""
-                        self.log("相机未提供对焦模式；不改变机身对焦设置。")
-                    }
-                    self.log("拍前：对焦=\(focus.isEmpty ? "未知" : focus)，卡=\(state.cardStatus ?? "未知")，占用=\(state.isBusy.map(String.init) ?? "未知")")
-                    if ["afs", "afc", "aff"].contains(focus) { _ = try await self.send(.autoFocus) }
+                    self.log("拍前：卡=\(state.cardStatus ?? "未知")，占用=\(state.isBusy.map(String.init) ?? "未知")；保留机身对焦优先设置。")
+                    // capture applies the camera's own focus priority. GX80 can reject
+                    // oneshot_af in AFS; that optional command must not block the shutter.
+                    stage = "发送快门"
                     pressed = true
+                    self.log("发送快门请求：mode=camcmd&value=capture（仅发送一次）")
                     _ = try await self.send(.capture)
                     accepted = true
                     try await self.sleep(0.1)
+                    stage = "释放快门"
                     releaseAttempted = true
+                    self.log("发送释放快门请求：mode=camcmd&value=capture_cancel")
                     _ = try await self.send(.releaseCapture)
                     pressed = false
+                    stage = "拍后状态"
                     let deadline = ProcessInfo.processInfo.systemUptime + 4
                     for _ in 0..<20 {
                         try Task.checkCancellation()
@@ -84,7 +82,7 @@ actor CameraControlService {
                         // Release an uncertain press even when the requesting view was canceled.
                         _ = await Task.detached { try? await client.send(.releaseCapture) }.value
                     }
-                    self.log("拍摄事务：\(error.localizedDescription)")
+                    self.log("拍摄事务（\(stage)）：\(error.localizedDescription)")
                     if !accepted, case CommandError.cameraRejected(let code) = error { return .rejected(code) }
                     return .unknown
                 }

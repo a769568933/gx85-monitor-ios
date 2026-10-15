@@ -9,5 +9,9 @@ final class DiagnosticsLog: ObservableObject {
         entries.append("[\(time)] \(String(message.prefix(512)))")
         if entries.count > 200 { entries.removeFirst(entries.count - 200) }
     }
-    var text: String { "GX85 Monitor 诊断记录\n" + entries.joined(separator: "\n") }
+    var text: String {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "未知"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "未知"
+        return "GX85 Monitor \(version)（build \(build)）诊断记录\n" + entries.joined(separator: "\n")
+    }
 }
