@@ -5,6 +5,36 @@ import GX85Core
 
 @MainActor
 final class CameraParameterTests: XCTestCase {
+    func testEmbeddedApertureUsesReportedLensLimitsAndCurrentModePermission() async throws {
+        let client = EmbeddedLensCamera(apertureEnabled: true)
+        let parameters = CameraParameterService(controls: CameraControlService(client: client))
+        let snapshot = try await parameters.load(lens: "normal")
+        let options = try XCTUnwrap(snapshot.options[.aperture])
+        XCTAssertEqual(options.first?.rawValue, "768/256")
+        XCTAssertEqual(options.first?.label, "F2.8")
+        XCTAssertEqual(options.last?.rawValue, "2304/256")
+        XCTAssertEqual(options.last?.label, "F22")
+        XCTAssertFalse(options.isEmpty)
+        XCTAssertTrue(options.allSatisfy(\.enabled))
+        XCTAssertEqual(snapshot.values[.aperture], "F2.8")
+    }
+
+    func testEmbeddedApertureRemainsDisabledWhenCameraControlsIt() async throws {
+        let client = EmbeddedLensCamera(apertureEnabled: false)
+        let parameters = CameraParameterService(controls: CameraControlService(client: client))
+        let snapshot = try await parameters.load(lens: "normal")
+        let options = try XCTUnwrap(snapshot.options[.aperture])
+        XCTAssertFalse(options.isEmpty)
+        XCTAssertTrue(options.allSatisfy { !$0.enabled })
+    }
+
+    func testInvalidLensRangeDoesNotInventApertureOptions() async throws {
+        let client = EmbeddedLensCamera(apertureEnabled: true, lensInfo: "ok,512/256,768/256,0,0,0,off,0,0")
+        let parameters = CameraParameterService(controls: CameraControlService(client: client))
+        let snapshot = try await parameters.load(lens: "normal")
+        XCTAssertTrue(snapshot.options[.aperture]?.isEmpty == true)
+    }
+
     func testGX80APEXValuesDisplayAsExposureWithoutMenuOptions() async throws {
         // 768/256 is the actual value in the user's GX80 diagnostics for both parameters.
         // Other literals cross-check conventional Lumix APEX shutter and aperture stops.
@@ -109,6 +139,28 @@ final class CameraParameterTests: XCTestCase {
         XCTAssertEqual(first.parameterOptions[.aperture]?.first?.rawValue, "392/256")
         XCTAssertEqual(second.parameterOptions[.aperture]?.first?.rawValue, "780/256")
         first.disconnect(); second.disconnect()
+    }
+}
+
+/// Synthetic GX80 embedded-menu structure and documented Lumix lens CSV layout.
+private actor EmbeddedLensCamera: CommandSending {
+    let apertureEnabled: Bool
+    let lensInfo: String
+    init(apertureEnabled: Bool, lensInfo: String = "ok,2304/256,768/256,0,0,0,off,0,0") {
+        self.apertureEnabled = apertureEnabled; self.lensInfo = lensInfo
+    }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        if command == .getInfo("allmenu") {
+            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuset model=\"GX80\"><qmenu><item id=\"menu_item_id_aperture\" func_type=\"sp_embeded_aperture\"/></qmenu></menuset></camrply>".utf8))
+        }
+        if command == .getInfo("curmenu") {
+            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><qmenu2><item id=\"menu_item_id_aperture\" enable=\"\(apertureEnabled ? "yes" : "no")\"/></qmenu2></menuinfo></camrply>".utf8))
+        }
+        if command == .getInfo("lens") { return try LumixResponse.parseMenu(data: Data(lensInfo.utf8)) }
+        if case .getSetting(let type) = command {
+            return LumixResponse(status: .success, fields: [type: type == "focal" ? "768/256" : (type == "shtrspeed" ? "1451/256" : "200")])
+        }
+        return LumixResponse(status: .success)
     }
 }
 

@@ -4,6 +4,37 @@ import GX85Core
 @testable import GX85Monitor
 
 final class CameraControlServiceTests: XCTestCase {
+    func testConfirmedNormalDriveDoesNotCancelSingleElectronicExposureAfter100ms() async {
+        let camera = CaptureDriveCamera(drive: "normal", shutter: "1451/256")
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let result = await controls.capturePhoto()
+        XCTAssertEqual(result, .acceptedUnconfirmed)
+        let calls = await camera.calls
+        XCTAssertTrue(calls.contains(.getInfo("curmenu")))
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertFalse(calls.contains(.releaseCapture), "A confirmed single exposure must finish in-camera instead of being canceled at 100ms")
+    }
+
+    func testBurstAndBulbStillReleaseInsteadOfLeavingShutterHeld() async {
+        for (drive, shutter) in [("burst", "1451/256"), ("normal", "16384/256")] {
+            let camera = CaptureDriveCamera(drive: drive, shutter: shutter)
+            let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+            _ = await controls.capturePhoto()
+            let calls = await camera.calls
+            XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+            XCTAssertEqual(calls.filter { $0 == .releaseCapture }.count, 1)
+        }
+    }
+
+    func testCaptureMetadataTimeoutDoesNotSubmitOrRepeatShutter() async {
+        let camera = CaptureDriveCamera(drive: "normal", shutter: "1451/256", metadataTimeout: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let result = await controls.capturePhoto()
+        XCTAssertEqual(result, .unknown)
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.capture))
+    }
+
     func testGX85TouchFocusUsesNewTouchProtocolRatherThanLegacyTouchAF() async throws {
         let camera = ControlCamera(.autoFocus)
         try await service(camera).focus(at: CGPoint(x: 0.25, y: 0.75))
@@ -198,6 +229,30 @@ final class CameraControlServiceTests: XCTestCase {
         catch { }
         let calls = await camera.calls
         XCTAssertTrue(calls.contains(.setSetting(type: "iso", value: "400")))
+    }
+}
+
+private actor CaptureDriveCamera: CommandSending {
+    let drive: String
+    let shutter: String
+    let metadataTimeout: Bool
+    private(set) var calls: [LumixCommand] = []
+    init(drive: String, shutter: String, metadataTimeout: Bool = false) {
+        self.drive = drive; self.shutter = shutter; self.metadataTimeout = metadataTimeout
+    }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        calls.append(command)
+        if command == .state {
+            return try LumixResponse.parse(data: Data("<camrply><result>ok</result><state><cammode>rec</cammode><rec>off</rec><sdcardstatus>write_enable</sdcardstatus><remaincapacity>4042</remaincapacity><sd_access>off</sd_access></state></camrply>".utf8))
+        }
+        if command == .getInfo("curmenu") {
+            if metadataTimeout { throw CommandError.timedOut }
+            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><qmenu2><item id=\"menu_item_id_drivemode\" enable=\"yes\" value=\"\(drive)\"/></qmenu2></menuinfo></camrply>".utf8))
+        }
+        if command == .getSetting("shtrspeed") {
+            return LumixResponse(status: .success, fields: ["shtrspeed": shutter])
+        }
+        return LumixResponse(status: .success)
     }
 }
 
