@@ -1,10 +1,23 @@
 import Foundation
 import XCTest
+import AVFoundation
 import GX85Core
 @testable import GX85Monitor
 
 @MainActor
 final class MediaExportCoordinatorTests: XCTestCase {
+    func testMoviePlayerUsesDownloadedFileAndReleasesItOnClose() async throws {
+        let downloader = FakeMediaDownloader()
+        let preview = CameraVideoPreviewModel(downloader: downloader)
+        let resource = CameraMediaResource(url: URL(string: "http://192.168.54.1/movie.MP4")!, mimeType: "video/mp4", role: .original)
+        await preview.load(resource)
+        let asset = try XCTUnwrap(preview.player?.currentItem?.asset as? AVURLAsset)
+        XCTAssertTrue(asset.url.isFileURL, "AVPlayer must never fetch camera redirects itself")
+        await preview.close()
+        XCTAssertNil(preview.player)
+        let discarded = await downloader.discarded
+        XCTAssertEqual(discarded, [asset.url])
+    }
     private func item(_ id: String, original: Bool = true) -> CameraMediaItem {
         CameraMediaItem(id: id, title: id + ".JPG", kind: .photo, resources: [CameraMediaResource(url: URL(string: "http://192.168.54.1/\(id).JPG")!, mimeType: "image/jpeg", role: original ? .original : .thumbnail)])
     }
