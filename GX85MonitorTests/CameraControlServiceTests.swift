@@ -94,7 +94,8 @@ final class CameraControlServiceTests: XCTestCase {
         let controls = service(camera)
         let capture = Task { await controls.capturePhoto() }
         for _ in 0..<500 {
-            if await camera.captureStarted { break }
+            let started = await camera.captureStarted
+            if started { break }
             await Task.yield()
         }
         let health = Task { try await controls.readState() }
@@ -115,7 +116,7 @@ final class CameraControlServiceTests: XCTestCase {
 }
 
 private actor ControlCamera: CommandSending {
-    enum Scenario { case ackOnly, timeout, busy, cardMissing, unknownRecording, autoFocus, focusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
+    enum Scenario: Equatable { case ackOnly, timeout, busy, cardMissing, unknownRecording, autoFocus, focusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
     let scenario: Scenario
     private(set) var calls: [LumixCommand] = []
     private(set) var captureStarted = false
@@ -124,7 +125,7 @@ private actor ControlCamera: CommandSending {
     func send(_ command: LumixCommand) async throws -> LumixResponse {
         calls.append(command)
         if command == .state {
-            var fields = ["cammode": "recmode", "rec": recording ? "on" : "off", "sdcardstatus": "writeenable", "recremaincapacity": "42"]
+            var fields = ["cammode": "recmode", "rec": recording ? "on" : "off", "sdcardstatus": "write_enable", "recremaincapacity": "42"]
             if scenario == .busy { fields["busy"] = "on" }
             if scenario == .cardMissing { fields["sdcardstatus"] = "no_card" }
             if scenario == .unknownRecording { fields.removeValue(forKey: "rec") }

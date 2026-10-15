@@ -135,7 +135,7 @@ final class CameraSessionTests: XCTestCase {
         let receiver = TestReceiver()
         let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         settings.accessID = "camera-id"
-        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { seconds in try await time.sleep(seconds) })
+        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { seconds in try await time.sleep(seconds) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() })
         session.connect()
         await waitUntil { session.canCapture }
         await waitUntil { time.pendingSleeps >= 2 }
@@ -166,7 +166,7 @@ final class CameraSessionTests: XCTestCase {
         let receiver = TestReceiver()
         let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
         settings.accessID = "camera-id"
-        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { seconds in try await time.sleep(seconds) })
+        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { seconds in try await time.sleep(seconds) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() })
         session.connect()
         await waitUntil { session.canCapture }
         await waitUntil { time.pendingSleeps >= 2 }

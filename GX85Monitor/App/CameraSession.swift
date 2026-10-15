@@ -23,6 +23,9 @@ final class CameraSession: ObservableObject {
     @Published private(set) var phase: Phase = .disconnected
     @Published private(set) var image: UIImage?
     @Published private(set) var isCapturing = false
+    @Published private(set) var actionInProgress = false
+    @Published private(set) var controlState = CameraControlState(response: LumixResponse(status: .success))
+    @Published private(set) var selectedShootingMode: CameraShootingMode = .photo
     @Published private(set) var frameIsStale = false
     @Published private(set) var notice: String?
     @Published private(set) var lastError: String?
@@ -42,7 +45,9 @@ final class CameraSession: ObservableObject {
     private let makeReceiver: () -> any LiveViewReceiving
     private let clock: @Sendable () -> TimeInterval
     private let sleep: @Sendable (TimeInterval) async throws -> Void
+    private let controlSleep: @Sendable (TimeInterval) async throws -> Void
     private var client: (any CommandSending)?
+    private var controls: CameraControlService?
     private var receiver: (any LiveViewReceiving)?
     private var connectionTask: Task<Void, Never>?
     private var monitorTask: Task<Void, Never>?
@@ -77,15 +82,19 @@ final class CameraSession: ObservableObject {
          clock: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
              try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
+         },
+         controlSleep: @escaping @Sendable (TimeInterval) async throws -> Void = { seconds in
+             try await Task.sleep(nanoseconds: UInt64(max(0, seconds) * 1_000_000_000))
          }) {
         self.settings = settings
         self.clock = clock
         self.sleep = sleep
+        self.controlSleep = controlSleep
         self.makeReceiver = makeReceiver
         self.makeClient = makeClient
     }
 
-    var canCapture: Bool { controlReady && foreground && wantsConnection && !isCapturing && !streamRestarting }
+    var canCapture: Bool { controlReady && foreground && wantsConnection && !actionInProgress && !streamRestarting }
     var isActive: Bool { wantsConnection }
 
     func connect() {
@@ -105,6 +114,7 @@ final class CameraSession: ObservableObject {
     func disconnect() {
         wantsConnection = false
         let previousClient = client
+        let previousControls = controls
         cancelTasksAndTransport()
         phase = .disconnected
         image = nil
@@ -113,7 +123,7 @@ final class CameraSession: ObservableObject {
         notice = nil
         diagnostics.append("已主动断开")
         // The old client belongs only to this session. It never operates a later connection.
-        stopOldStream(previousClient)
+        stopOldStream(previousClient, controls: previousControls)
     }
 
     func setForeground(_ value: Bool) {
@@ -121,11 +131,12 @@ final class CameraSession: ObservableObject {
         foreground = value
         if !value {
             let previousClient = client
+            let previousControls = controls
             cancelTasksAndTransport()
             phase = .disconnected
             image = nil
             diagnostics.append("进入后台，停止监看")
-            stopOldStream(previousClient)
+            stopOldStream(previousClient, controls: previousControls)
         } else if wantsConnection {
             policy = SessionPolicy()
             diagnostics.append("返回前台，重新连接")
@@ -135,32 +146,51 @@ final class CameraSession: ObservableObject {
 
     func clearNotice() { notice = nil }
 
-    func capture() {
-        guard canCapture, let client else { return }
+    func selectShootingMode(_ mode: CameraShootingMode) {
+        guard mode != .unknown, !actionInProgress, controlState.recordingState != .recording else { return }
+        selectedShootingMode = mode
+    }
+
+    func capture() { performPrimaryAction() }
+
+    func performPrimaryAction() {
+        guard canCapture, let controls else { return }
         isCapturing = true
+        actionInProgress = true
         notice = nil
         policy.captureStarted()
         let current = epoch
+        let mode = selectedShootingMode
+        let shouldStartRecording = controlState.recordingState != .recording
         captureTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let response = try await client.send(.capture)
-                try self.check(current)
-                guard response.status == .success else { throw CommandError.waitingApproval }
-                self.notice = "相机已接受拍照指令，照片保存在相机中。"
-                self.diagnostics.append("快门：相机已接受指令")
+                if mode == .video {
+                    _ = try await controls.setRecording(shouldStartRecording)
+                    try self.check(current)
+                    self.applyControlState(await controls.latestState)
+                    self.notice = self.controlState.recordingState == .recording ? "相机已确认开始录像。" : "相机已确认停止录像。"
+                } else {
+                    let outcome = await controls.capturePhoto()
+                    try self.check(current)
+                    self.applyControlState(await controls.latestState)
+                    switch outcome {
+                    case .confirmed: self.notice = "相机已确认生成新照片。"
+                    case .acceptedUnconfirmed: self.notice = "拍照指令已接受，拍摄结果待确认，请检查相机。"
+                    case .rejected(let reason): self.notice = "无法拍照：\(reason)"
+                    case .unknown: self.notice = "拍摄结果未知，请检查相机。为避免重复拍摄，未自动重试。"
+                    }
+                }
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
             } catch {
                 guard self.isCurrent(current) else { return }
-                if case CommandError.cameraRejected(let code) = error {
-                    self.notice = "相机未接受拍照：\(code)。"
-                } else {
-                    self.notice = "拍摄结果未知，请检查相机。为避免重复拍摄，未自动重试。"
-                }
-                self.diagnostics.append("快门：\(error.localizedDescription)")
+                self.controlState = CameraControlState(response: LumixResponse(status: .success))
+                self.notice = error.localizedDescription
+                self.diagnostics.append("拍摄操作：\(error.localizedDescription)")
             }
             guard self.isCurrent(current) else { return }
             self.isCapturing = false
+            self.actionInProgress = false
             self.policy.captureFinished(now: self.clock())
             self.captureTask = nil
             if self.deferredRecovery { self.deferredRecovery = false; self.recover() }
@@ -230,6 +260,12 @@ final class CameraSession: ObservableObject {
             }
         })
         client = commandClient
+        controls = CameraControlService(client: commandClient, sleep: controlSleep, log: { [weak self] message in
+            Task { @MainActor [weak self] in
+                guard let self, self.epoch == current else { return }
+                self.diagnostics.append(message)
+            }
+        })
         var id = settings.accessID.trimmingCharacters(in: .whitespacesAndNewlines)
         if id.isEmpty {
             if let discovered = await CameraIdentityResolver.resolve(endpoint: endpoint) {
@@ -256,7 +292,7 @@ final class CameraSession: ObservableObject {
         }
         guard permitted else { throw CommandError.waitingApproval }
         try await sendSuccess(.state, via: commandClient, current: current)
-        try await sendSuccess(.recordMode, via: commandClient, current: current)
+        if controlState.recordingState != .recording { try await sendSuccess(.recordMode, via: commandClient, current: current) }
         let liveReceiver = makeReceiver()
         receiver = liveReceiver
         let decoder = self.decoder
@@ -272,9 +308,22 @@ final class CameraSession: ObservableObject {
     }
 
     private func sendSuccess(_ command: LumixCommand, via client: any CommandSending, current: UUID) async throws {
-        let response = try await client.send(command)
+        if command == .state, let controls {
+            let state = try await controls.readState()
+            try check(current)
+            applyControlState(state)
+            return
+        }
+        let response: LumixResponse
+        if let controls { response = try await controls.sendExclusive(command) }
+        else { response = try await client.send(command) }
         try check(current)
         guard response.status == .success else { throw CommandError.waitingApproval }
+    }
+
+    private func applyControlState(_ state: CameraControlState) {
+        controlState = state
+        if state.shootingMode != .unknown { selectedShootingMode = state.shootingMode }
     }
 
     private func startMonitor(_ current: UUID) {
@@ -285,6 +334,7 @@ final class CameraSession: ObservableObject {
             while self.isCurrent(current), self.controlReady, !Task.isCancelled {
                 do { try await self.sleep(0.5); try self.check(current) }
                 catch { return }
+                if self.actionInProgress { continue }
                 let now = self.clock()
                 if now - lastHealth >= 2, !self.isCapturing, let client = self.client {
                     lastHealth = now
@@ -383,6 +433,8 @@ final class CameraSession: ObservableObject {
         receiver?.stop()
         receiver = nil
         client = nil
+        controls = nil
+        controlState = CameraControlState(response: LumixResponse(status: .success))
         generation = UUID()
         decoder.reset(generation: generation)
         image = nil
@@ -391,12 +443,13 @@ final class CameraSession: ObservableObject {
         UIApplication.shared.isIdleTimerDisabled = false
     }
 
-    private func stopOldStream(_ previous: (any CommandSending)?) {
+    private func stopOldStream(_ previous: (any CommandSending)?, controls previousControls: CameraControlService?) {
         guard let previous else { return }
         let stoppedEpoch = epoch
         cleanupTask = Task { [weak self] in
             guard let self, self.epoch == stoppedEpoch else { return }
-            _ = try? await previous.send(.stopStream)
+            if let previousControls { _ = try? await previousControls.sendExclusive(.stopStream) }
+            else { _ = try? await previous.send(.stopStream) }
         }
     }
 
@@ -406,6 +459,7 @@ final class CameraSession: ObservableObject {
         monitorTask?.cancel(); monitorTask = nil
         captureTask?.cancel(); captureTask = nil
         isCapturing = false
+        actionInProgress = false
         deferredRecovery = false
         closeTransport()
     }
