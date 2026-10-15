@@ -101,6 +101,19 @@ public struct CameraCapabilities: Equatable, Sendable {
         return CameraCapabilities(values: updated, diagnostics: messages, owners: updatedOwners, embeddedAperture: embeddedAperture)
     }
 
+    public static func supportsVGALiveView(menu data: Data) throws -> Bool {
+        let root = try BoundedCameraXML.parse(data: data, maximumSize: 2 * 1024 * 1024)
+        guard root.name == "camrply", root.children.first(where: { $0.name == "result" })?.text == "ok",
+              let menu = root.children.first(where: { $0.name == "menuset" }) else { throw ResponseError.malformed }
+        func containsEnabledVGA(_ node: CameraXMLNode) -> Bool {
+            if ["no", "false", "0", "off"].contains(node.attributes["enable"]?.lowercased() ?? "") { return false }
+            if node.attributes["cmd_mode"] == "setsetting", node.attributes["cmd_type"] == "liveviewsize",
+               node.attributes["cmd_value"] == "vga" { return true }
+            return node.children.contains(where: containsEnabledVGA)
+        }
+        return containsEnabledVGA(menu)
+    }
+
     public static func driveMode(currentMenu data: Data) throws -> String? {
         let root = try BoundedCameraXML.parse(data: data, maximumSize: 2 * 1024 * 1024)
         guard root.name == "camrply", root.children.first(where: { $0.name == "result" })?.text == "ok",

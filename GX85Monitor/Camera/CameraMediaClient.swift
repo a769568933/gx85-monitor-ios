@@ -2,6 +2,7 @@ import Foundation
 import GX85Core
 
 protocol CameraMediaBrowsing: Sendable {
+    /// start is a newest-first display offset, not the camera's SOAP index.
     func browse(start: Int, count: Int, objectID: String) async throws -> CameraMediaPage
 }
 
@@ -12,6 +13,7 @@ actor CameraMediaClient: CameraMediaBrowsing {
     private let catalogGate = CameraPermitPool(limit: 1)
     private let imageGate = CameraPermitPool(limit: 3)
     private var service: ContentDirectoryService?
+    private var catalogs: [String: (total: Int, updateID: String?)] = [:]
     private let log: @Sendable (String) -> Void
 
     init(endpoint: CameraEndpoint, descriptionURL: URL? = nil, configuration: URLSessionConfiguration = .ephemeral,
@@ -34,6 +36,36 @@ actor CameraMediaClient: CameraMediaBrowsing {
         defer { Task { await catalogGate.release() } }
         try Task.checkCancellation()
         let resolved = try await resolveService()
+        if start == 0 || catalogs[objectID] == nil {
+            catalogs[objectID] = nil
+            let probe = try await readPage(service: resolved, start: 0, count: 1, objectID: objectID)
+            catalogs[objectID] = (probe.totalMatches, probe.updateID)
+        }
+        guard let catalog = catalogs[objectID], start <= catalog.total else { throw CameraMediaError.directoryChanged }
+        let end = catalog.total - start
+        let beginning = max(0, end - count)
+        var cursor = beginning, items: [CameraMediaItem] = [], seen = Set<String>()
+        // Complete a bounded range before reversing it. Some bodies cap each
+        // reply below RequestedCount; reversing short chunks separately skips
+        // or interleaves photos at page boundaries.
+        for _ in 0..<count where cursor < end {
+            let page = try await readPage(service: resolved, start: cursor, count: end - cursor, objectID: objectID)
+            guard page.totalMatches == catalog.total,
+                  catalog.updateID == nil || page.updateID == nil || page.updateID == catalog.updateID else { throw CameraMediaError.directoryChanged }
+            guard page.numberReturned > 0, page.numberReturned <= end - cursor else { throw CameraMediaError.noProgress }
+            for item in page.items {
+                guard seen.insert(item.id).inserted else { throw CameraMediaError.directoryChanged }
+                items.append(item)
+            }
+            cursor += page.numberReturned
+        }
+        guard cursor == end else { throw CameraMediaError.noProgress }
+        let next = start + items.count
+        return CameraMediaPage(items: Array(items.reversed()), numberReturned: items.count, totalMatches: catalog.total,
+                               nextStartingIndex: next < catalog.total ? next : nil, updateID: catalog.updateID)
+    }
+
+    private func readPage(service resolved: ContentDirectoryService, start: Int, count: Int, objectID: String) async throws -> CameraMediaPage {
         var request = URLRequest(url: resolved.url)
         request.httpMethod = "POST"
         request.setValue("text/xml; charset=utf-8", forHTTPHeaderField: "Content-Type")
@@ -43,9 +75,19 @@ actor CameraMediaClient: CameraMediaBrowsing {
         <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><u:Browse xmlns:u="\(resolved.serviceType)"><ObjectID>\(Self.escape(objectID))</ObjectID><BrowseFlag>BrowseDirectChildren</BrowseFlag><Filter>*</Filter><StartingIndex>\(start)</StartingIndex><RequestedCount>\(count)</RequestedCount><SortCriteria></SortCriteria></u:Browse></s:Body></s:Envelope>
         """
         request.httpBody = Data(body.utf8)
-        let data = try await CameraHTTPReader.data(for: request, session: session, cameraHost: cameraHost, limit: 4 * 1024 * 1024)
-        try Task.checkCancellation()
-        return try ContentDirectoryReply.parse(data: data, cameraHost: cameraHost, startingIndex: start)
+        log("相册请求：目录=\(objectID.prefix(64))，起点=\(start)，数量=\(count)")
+        var replyBytes = 0
+        do {
+            let data = try await CameraHTTPReader.data(for: request, session: session, cameraHost: cameraHost, limit: 4 * 1024 * 1024)
+            replyBytes = data.count
+            try Task.checkCancellation()
+            let page = try ContentDirectoryReply.parse(data: data, cameraHost: cameraHost, startingIndex: start)
+            log("相册回复：起点=\(start)，返回=\(page.numberReturned)，总数=\(page.totalMatches)，更新=\(page.updateID ?? "无")，字节=\(data.count)")
+            return page
+        } catch {
+            log("相册分页失败：起点=\(start)，数量=\(count)，字节=\(replyBytes)，原因=\(String(describing: error).prefix(300))")
+            throw error
+        }
     }
 
     func imageData(_ resource: CameraMediaResource, maximumSize: Int = 2 * 1024 * 1024) async throws -> Data {

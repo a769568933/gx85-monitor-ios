@@ -29,15 +29,16 @@ public enum LumixCommand: Equatable, Sendable {
         case .videoStop: items = [("mode", "camcmd"), ("value", "video_recstop")]
         case .playbackMode: items = [("mode", "camcmd"), ("value", "playmode")]
         case let .getSetting(type):
-            guard ["shtrspeed", "focal", "iso", "focusmode"].contains(type) else { throw ControlInputError.invalidParameter }
+            guard ["shtrspeed", "focal", "iso", "focusmode", "liveviewsize"].contains(type) else { throw ControlInputError.invalidParameter }
             items = [("mode", "getsetting"), ("type", type)]
         case let .getInfo(type):
             guard ["allmenu", "curmenu", "lens"].contains(type) else { throw ControlInputError.invalidParameter }
             items = [("mode", "getinfo"), ("type", type)]
         case let .setSetting(type, value):
-            guard ["shtrspeed", "focal", "iso"].contains(type), !value.isEmpty, value.utf8.count <= 64,
+            guard ["shtrspeed", "focal", "iso", "liveviewsize"].contains(type), !value.isEmpty, value.utf8.count <= 64,
                   value.allSatisfy({ $0.isASCII && ($0.isNumber || $0.isLetter || "/.-+_".contains($0)) })
             else { throw ControlInputError.invalidParameter }
+            if type == "liveviewsize", !["vga", "qvga"].contains(value) { throw ControlInputError.invalidParameter }
             items = [("mode", "setsetting"), ("type", type), ("value", value)]
         case let .touchFocus(x, y):
             guard (0...1000).contains(x), (0...1000).contains(y) else { throw ControlInputError.invalidParameter }

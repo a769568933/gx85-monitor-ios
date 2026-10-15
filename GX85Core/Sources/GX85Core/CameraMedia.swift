@@ -63,10 +63,12 @@ public enum MediaURLPolicy {
 
 public enum CameraMediaError: LocalizedError {
     case invalidURL, malformedDirectory, originalUnavailable, noProgress
+    case invalidDirectoryField(String), directoryChanged
     public var errorDescription: String? {
         switch self {
         case .invalidURL: return "媒体地址不属于当前相机，已拒绝访问。"
-        case .malformedDirectory: return "无法识别相机相册回复，请重新载入或查看诊断。"
+        case .malformedDirectory, .invalidDirectoryField: return "无法识别相机相册回复，请重试本页或查看诊断。"
+        case .directoryChanged: return "相机内容已变化，请重新载入相册。"
         case .originalUnavailable: return "相机未提供此格式的无线原文件，不能将预览图作为原片导出。"
         case .noProgress: return "相机没有返回下一页，请重新载入相册。"
         }

@@ -25,6 +25,12 @@ struct SettingsView: View {
                 }
                 if let notice = session.notice { Section("最近操作结果") { Text(notice) } }
                 if let error = session.lastError { Section("连接提示") { Text(error).foregroundStyle(.yellow) } }
+                Section("实时监看画质") {
+                    if let pixels = session.image?.cgImage { Text("相机输出：\(pixels.width) × \(pixels.height)") }
+                    else { Text("收到实时画面后显示分辨率") }
+                    Text("连接时尝试将相机的低清监看调高；保留传来画面的全部像素。Wi-Fi 实时取景是压缩预览，清晰度受相机输出限制。")
+                        .font(.footnote).foregroundStyle(.secondary)
+                }
                 Section {
                     NavigationLink("连接诊断") { DiagnosticsView(session: session, log: session.diagnostics) }
                     DisclosureGroup("高级连接设置") {

@@ -5,6 +5,49 @@ import GX85Core
 
 @MainActor
 final class CameraParameterTests: XCTestCase {
+    func testMCombinedControlExposesAndConfirmsBothShutterAndLensAperture() async throws {
+        let camera = EmbeddedLensCamera(apertureEnabled: false, shutterEnabled: false, combinedEnabled: true)
+        let controls = CameraControlService(client: camera)
+        let parameters = CameraParameterService(controls: controls)
+        let snapshot = try await parameters.load(lens: "normal")
+        let shutter = try XCTUnwrap(snapshot.options[.shutter]?.first { $0.rawValue == "1792/256" })
+        let aperture = try XCTUnwrap(snapshot.options[.aperture]?.first { $0.rawValue == "1024/256" })
+        XCTAssertTrue(shutter.enabled)
+        XCTAssertTrue(aperture.enabled)
+        XCTAssertEqual(shutter.label, "1/125")
+        try await controls.setParameter(.shutter, rawValue: shutter.rawValue)
+        try await controls.setParameter(.aperture, rawValue: aperture.rawValue)
+        let updated = try await parameters.load(lens: "normal")
+        XCTAssertEqual(updated.values[.shutter], "1/125")
+        XCTAssertEqual(updated.values[.aperture], "F4")
+    }
+
+    func testAperturePriorityDoesNotPresentRetainedManualShutterAsLiveExposure() async throws {
+        let camera = EmbeddedLensCamera(apertureEnabled: true, shutterEnabled: false, combinedEnabled: false)
+        let snapshot = try await CameraParameterService(controls: CameraControlService(client: camera)).load(lens: "normal")
+        XCTAssertEqual(snapshot.values[.shutter], "自动")
+        XCTAssertFalse(snapshot.options[.shutter]?.contains { $0.enabled } ?? false)
+        XCTAssertEqual(snapshot.values[.aperture], "F2.8")
+    }
+
+    func testShutterPriorityAllowsShutterAndMarksApertureAutomatic() async throws {
+        let camera = EmbeddedLensCamera(apertureEnabled: false, shutterEnabled: true, combinedEnabled: false)
+        let snapshot = try await CameraParameterService(controls: CameraControlService(client: camera)).load(lens: "normal")
+        XCTAssertEqual(snapshot.values[.shutter], "1/50")
+        XCTAssertTrue(snapshot.options[.shutter]?.contains { $0.enabled } ?? false)
+        XCTAssertEqual(snapshot.values[.aperture], "自动")
+    }
+
+    func testSuccessfulParameterChangeIsSilent() async throws {
+        let session = await connected(ParameterCamera())
+        let option = try XCTUnwrap(session.parameterOptions[.iso]?.first { $0.rawValue == "400" })
+        session.updateParameter(.iso, option: option)
+        for _ in 0..<400 { if !session.actionInProgress { break }; try? await Task.sleep(nanoseconds: 5_000_000) }
+        XCTAssertEqual(session.parameterValues[.iso], "400")
+        XCTAssertNil(session.notice)
+        session.disconnect()
+    }
+
     func testEmbeddedApertureUsesReportedLensLimitsAndCurrentModePermission() async throws {
         let client = EmbeddedLensCamera(apertureEnabled: true)
         let parameters = CameraParameterService(controls: CameraControlService(client: client))
@@ -146,20 +189,26 @@ final class CameraParameterTests: XCTestCase {
 private actor EmbeddedLensCamera: CommandSending {
     let apertureEnabled: Bool
     let lensInfo: String
-    init(apertureEnabled: Bool, lensInfo: String = "ok,2304/256,768/256,0,0,0,off,0,0") {
+    let shutterEnabled: Bool?
+    let combinedEnabled: Bool?
+    private var values = ["focal": "768/256", "shtrspeed": "1451/256", "iso": "200"]
+    init(apertureEnabled: Bool, lensInfo: String = "ok,2304/256,768/256,0,0,0,off,0,0", shutterEnabled: Bool? = nil, combinedEnabled: Bool? = nil) {
         self.apertureEnabled = apertureEnabled; self.lensInfo = lensInfo
+        self.shutterEnabled = shutterEnabled; self.combinedEnabled = combinedEnabled
     }
     func send(_ command: LumixCommand) async throws -> LumixResponse {
         if command == .getInfo("allmenu") {
-            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuset model=\"GX80\"><qmenu><item id=\"menu_item_id_aperture\" func_type=\"sp_embeded_aperture\"/></qmenu></menuset></camrply>".utf8))
+            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuset model=\"GX80\"><qmenu><item id=\"menu_item_id_aperture\" func_type=\"sp_embeded_aperture\"/><item id=\"menu_item_id_shutter_speed\" func_type=\"sp_embeded_shutter_speed\"/><item id=\"menu_item_id_f_and_ss\" func_type=\"sp_embeded_f_and_ss\"/></qmenu></menuset></camrply>".utf8))
         }
         if command == .getInfo("curmenu") {
-            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><qmenu2><item id=\"menu_item_id_aperture\" enable=\"\(apertureEnabled ? "yes" : "no")\"/></qmenu2></menuinfo></camrply>".utf8))
+            let extra = [("menu_item_id_shutter_speed", shutterEnabled), ("menu_item_id_f_and_ss", combinedEnabled)].compactMap { id, enabled -> String? in
+                guard let enabled else { return nil }; return "<item id=\"\(id)\" enable=\"\(enabled ? "yes" : "no")\"/>"
+            }.joined()
+            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><qmenu2><item id=\"menu_item_id_aperture\" enable=\"\(apertureEnabled ? "yes" : "no")\"/>\(extra)</qmenu2></menuinfo></camrply>".utf8))
         }
         if command == .getInfo("lens") { return try LumixResponse.parseMenu(data: Data(lensInfo.utf8)) }
-        if case .getSetting(let type) = command {
-            return LumixResponse(status: .success, fields: [type: type == "focal" ? "768/256" : (type == "shtrspeed" ? "1451/256" : "200")])
-        }
+        if case .setSetting(let type, let value) = command { values[type] = value }
+        if case .getSetting(let type) = command { return LumixResponse(status: .success, fields: [type: values[type] ?? ""]) }
         return LumixResponse(status: .success)
     }
 }

@@ -246,9 +246,8 @@ final class CameraSessionTests: XCTestCase {
         session.connect()
         await waitUntil { session.canCapture }
         session.capture()
-        await waitUntil { !session.isCapturing && session.notice != nil }
-        XCTAssertFalse(session.notice?.contains("照片保存在") == true)
-        XCTAssertTrue(session.notice?.contains("待确认") == true)
+        await waitUntil { !session.isCapturing }
+        XCTAssertNil(session.notice, "Accepted capture should be quiet without claiming a file was saved")
         session.disconnect()
     }
 

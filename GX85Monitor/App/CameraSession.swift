@@ -458,6 +458,8 @@ final class CameraSession: ObservableObject {
         guard permitted else { throw CommandError.waitingApproval }
         try await sendSuccess(.state, via: commandClient, current: current)
         if controlState.recordingState == .stopped { try await sendSuccess(.recordMode, via: commandClient, current: current) }
+        if controlState.recordingState == .stopped { try await controls?.prepareLiveViewQuality() }
+        try check(current)
         let liveReceiver = makeReceiver()
         receiver = liveReceiver
         let decoder = self.decoder
@@ -664,6 +666,9 @@ final class CameraSession: ObservableObject {
     private func received(_ image: UIImage, generation: UUID) {
         guard generation == self.generation, controlReady, foreground, wantsConnection else { return }
         let now = clock()
+        if let cg = image.cgImage, self.image?.cgImage?.width != cg.width || self.image?.cgImage?.height != cg.height {
+            diagnostics.append("实时监看源画面：\(cg.width)×\(cg.height)；直接解码，未再次压缩或缩小。")
+        }
         self.image = image
         lastFrameTime = now
         lastFrameAge = 0

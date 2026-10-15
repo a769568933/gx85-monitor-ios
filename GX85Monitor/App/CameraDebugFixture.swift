@@ -82,10 +82,13 @@ private actor FixtureCommands: CommandSending {
     init(recording: Bool, onFocus: @escaping @Sendable () -> Void) { self.recording = recording; self.onFocus = onFocus }
     func send(_ command: LumixCommand) async throws -> LumixResponse {
         if command == .getInfo("allmenu") {
+            let apertures = [392, 427, 512, 598, 683, 768, 854, 938, 1024, 1110, 1195, 1280, 1366, 1451, 1536, 1622, 1707, 1792, 1878, 1963, 2048, 2134, 2219, 2304].map { code in
+                "<item id=\"f\(code)\" cmd_mode=\"setsetting\" cmd_type=\"focal\" cmd_value=\"\(code)/256\" title=\"\(ExposureParameter.aperture.displayValue(for: "\(code)/256") ?? "—")\"/>"
+            }.joined()
             let xml = """
             <camrply><result>ok</result><menuset><qmenu>
               <menu id="ss"><item id="ss125" cmd_mode="setsetting" cmd_type="shtrspeed" cmd_value="1780/256" title="1/125"/></menu>
-              <menu id="f"><item id="f17" cmd_mode="setsetting" cmd_type="focal" cmd_value="392/256" title="F1.7"/></menu>
+              <menu id="f">\(apertures)</menu>
               <menu id="sensitivity"><item id="iso100" cmd_mode="setsetting" cmd_type="iso" cmd_value="100" title="100"/><item id="iso400" cmd_mode="setsetting" cmd_type="iso" cmd_value="400" title="400"/></menu>
             </qmenu></menuset></camrply>
             """

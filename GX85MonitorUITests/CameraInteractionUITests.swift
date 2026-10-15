@@ -33,6 +33,22 @@ final class CameraInteractionUITests: XCTestCase {
         assertNoFocus(in: app)
     }
 
+    func testAperturePickerScrollsToSmallApertureWithoutFocusingImage() {
+        let app = launch()
+        app.buttons["parameter-aperture"].tap()
+        let options = app.descendants(matching: .any)["parameter-options"].firstMatch
+        guard options.waitForExistence(timeout: 3) else { return XCTFail("Exposure choices need a scrollable panel") }
+        for _ in 0..<8 {
+            if app.buttons["F22"].isHittable { break }
+            options.swipeUp()
+        }
+        XCTAssertTrue(app.buttons["F22"].isHittable)
+        app.buttons["F22"].tap()
+        XCTAssertFalse(options.exists)
+        assertNoFocus(in: app)
+        XCTAssertFalse(app.staticTexts["光圈已由相机确认。"].exists)
+    }
+
     func testPortraitBlackBorderDoesNotSendFocus() {
         let app = launch()
         app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25)).tap()

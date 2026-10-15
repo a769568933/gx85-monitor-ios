@@ -124,6 +124,27 @@ actor CameraControlService {
         // an uncertain preflight or try a second shutter as a fallback.
     }
 
+    func prepareLiveViewQuality() async throws {
+        try await transaction {
+            do {
+                let menu = try await self.send(.getInfo("allmenu"))
+                guard try CameraCapabilities.supportsVGALiveView(menu: menu.body) else { return }
+                let reply = try await self.send(.getSetting("liveviewsize"))
+                let size = reply.fields["liveviewsize"] ?? reply.fields["value"] ?? ""
+                self.log("相机监看设置：\(size.prefix(64))；以实际帧分辨率为准。")
+                guard size == "qvga" else { return }
+                let state = try await self.readStateUnlocked()
+                guard state.recordingState == .stopped, state.isBusy != true else { return }
+                _ = try await self.send(.setSetting(type: "liveviewsize", value: "vga"))
+                let actual = try await self.send(.getSetting("liveviewsize"))
+                self.log("已请求 VGA 监看；回读=\(actual.fields["liveviewsize"] ?? actual.fields["value"] ?? "未知")；等待实际画面确认。")
+            } catch {
+                try Task.checkCancellation()
+                self.log("可选监看画质设置不可用：\(error.localizedDescription)；保留相机现有输出。")
+            }
+        }
+    }
+
     func setRecording(_ active: Bool) async throws -> CameraRecordingState {
         try await transaction {
             self.lastRecordingMutationSent = false

@@ -82,7 +82,7 @@ struct CameraView: View {
             ZStack {
                 Color.black
                 if let image = session.image {
-                    Image(uiImage: image).resizable()
+                    Image(uiImage: image).resizable().interpolation(.high)
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                         .accessibilityLabel("GX85 实时取景画面")
