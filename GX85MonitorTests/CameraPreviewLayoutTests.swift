@@ -9,7 +9,13 @@ final class CameraPreviewLayoutTests: XCTestCase {
     // A cyan marker in a synthetic live frame reveals actual SwiftUI placement,
     // including parent layout, safe areas and notices. No pure-fit mirror assertion.
     func testPreviewCenterAndNoticeDoNotMoveRealRenderedImage() async throws {
-        for size in [CGSize(width: 390, height: 844), CGSize(width: 844, height: 390)] {
+        let cases: [(CGSize, CGSize)] = [
+            (CGSize(width: 390, height: 844), CGSize(width: 640, height: 480)),
+            (CGSize(width: 844, height: 390), CGSize(width: 640, height: 480)),
+            (CGSize(width: 390, height: 844), CGSize(width: 640, height: 360)),
+            (CGSize(width: 844, height: 390), CGSize(width: 640, height: 360))
+        ]
+        for (size, imageSize) in cases {
             let receiver = LayoutReceiver()
             let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
             settings.accessID = "layout-test-camera"
@@ -19,9 +25,9 @@ final class CameraPreviewLayoutTests: XCTestCase {
                 if session.canCapture { break }
                 try await Task.sleep(nanoseconds: 5_000_000)
             }
-            let pattern = UIGraphicsImageRenderer(size: CGSize(width: 640, height: 480)).image { _ in
-                UIColor.magenta.setFill(); UIRectFill(CGRect(x: 0, y: 0, width: 640, height: 480))
-                UIColor.cyan.setFill(); UIRectFill(CGRect(x: 288, y: 208, width: 64, height: 64))
+            let pattern = UIGraphicsImageRenderer(size: imageSize).image { _ in
+                UIColor.magenta.setFill(); UIRectFill(CGRect(origin: .zero, size: imageSize))
+                UIColor.cyan.setFill(); UIRectFill(CGRect(x: imageSize.width / 2 - 32, y: imageSize.height / 2 - 32, width: 64, height: 64))
             }
             receiver.emit(try XCTUnwrap(pattern.jpegData(compressionQuality: 1)))
             for _ in 0..<200 {
