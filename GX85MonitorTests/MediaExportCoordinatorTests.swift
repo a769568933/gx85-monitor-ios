@@ -36,7 +36,7 @@ final class MediaExportCoordinatorTests: XCTestCase {
         XCTAssertEqual(model.failures.map(\.item.id), ["thumb"])
         XCTAssertTrue(model.successfulIDs.isEmpty, "Download does not mean saved to Photos or Files")
         model.cancel()
-        for _ in 0..<100 { if await fake.discarded.count == 1 { break }; await Task.yield() }
+        for _ in 0..<100 { if (await fake.discarded).count == 1 { break }; await Task.yield() }
         let removed = await fake.discarded
         XCTAssertEqual(removed.count, 1)
     }
@@ -52,7 +52,7 @@ final class MediaExportCoordinatorTests: XCTestCase {
         model.cancel()
         await fake.releaseSecond()
         await settle(model)
-        for _ in 0..<200 { if await fake.discarded.count == 2 { break }; try? await Task.sleep(nanoseconds: 5_000_000) }
+        for _ in 0..<200 { if (await fake.discarded).count == 2 { break }; try? await Task.sleep(nanoseconds: 5_000_000) }
         XCTAssertTrue(model.prepared.isEmpty)
         XCTAssertTrue(model.successfulIDs.isEmpty)
         let removed = await fake.discarded
