@@ -1,6 +1,16 @@
 import CoreGraphics
 
 enum PreviewLayout {
+    static func focusPoint(at point: CGPoint, in imageRect: CGRect) -> CGPoint? {
+        guard point.x.isFinite, point.y.isFinite,
+              imageRect.origin.x.isFinite, imageRect.origin.y.isFinite,
+              imageRect.width.isFinite, imageRect.height.isFinite,
+              imageRect.width > 0, imageRect.height > 0,
+              point.x >= imageRect.minX, point.x <= imageRect.maxX,
+              point.y >= imageRect.minY, point.y <= imageRect.maxY else { return nil }
+        return CGPoint(x: (point.x - imageRect.minX) / imageRect.width,
+                       y: (point.y - imageRect.minY) / imageRect.height)
+    }
     static func fit(imageSize: CGSize, in available: CGSize) -> CGRect {
         guard imageSize.width > 0, imageSize.height > 0,
               available.width > 0, available.height > 0,

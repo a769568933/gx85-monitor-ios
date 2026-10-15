@@ -12,7 +12,7 @@ import tree_sitter_swift
 from openstep_parser import OpenStepDecoder
 
 parser = Parser(Language(tree_sitter_swift.language()))
-files = list((ROOT / 'GX85Core').rglob('*.swift')) + list((ROOT / 'GX85Monitor').rglob('*.swift')) + list((ROOT / 'GX85MonitorTests').rglob('*.swift'))
+files = list((ROOT / 'GX85Core').rglob('*.swift')) + list((ROOT / 'GX85Monitor').rglob('*.swift')) + list((ROOT / 'GX85MonitorTests').rglob('*.swift')) + list((ROOT / 'GX85MonitorUITests').rglob('*.swift'))
 errors = []
 for path in files:
     data = path.read_bytes()

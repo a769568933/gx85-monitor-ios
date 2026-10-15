@@ -31,7 +31,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\camera-identity.ps
 
 为兼容 iOS 16 起的数字 IP 明文 HTTP，Info.plist 使用 `NSAllowsArbitraryLoads`。应用实际请求仅由校验后的相机 IPv4 地址生成；UPnP 描述地址和 HTTP 重定向也限制在同一相机。没有浏览器、广告、分析上报或其他联网业务。以后增加互联网功能时应重新收紧和拆分网络策略。
 
-## 资料来源
+## 0.2 控制与媒体
+
+曝光采用 `allmenu/curmenu` 解析相机提供的选项与 enable 状态，`shtrspeed/focal/iso` 保留原值，设置后读回。缺少权限元数据时禁用编辑。尚无验证过的 GX85 UDP 元数据夹具，因此不按猜测偏移读取机身模式；以手动操作选择和 `getstate.rec` 确认录像。
+
+快门事务包括状态检查、已知 AF 分支、单次 `capture` 和释放 `capture_cancel`，最多 4 秒查询确认；超时不自动重发。未取得明确新文件事件时只报告收到指令而尚未确认拍成。该流程仍需本用户 GX85 实机核对。
+
+相册使用相机描述服务中的 ContentDirectory 控制地址，发现失败只尝试同相机的 `http://<相机>:60606/Server0/CDS_control`。SOAP 与 DIDL 分层、有界解析，40 项分页；按 Panasonic 资源 profile 区分原件/预览/缩略图，不把未知 profile 当原件。回放期间暂停监看恢复，退出前重新读取录制状态。
+
+媒体 HTTP 和重定向只接受当前相机的数字 IPv4，拒绝 userinfo、外部主机和其他协议。缩略图/预览有字节和像素上限；原件直接落盘，8 GiB 上限和空间预检，不经整段 Data。Photos 使用 addOnly 和文件 URL，Files 使用系统导出器，系统完成回调才算保存成功。相机原文件不修改、不删除。
+
+## 资料来源（0.1 与 0.2）
 
 - [松下 GX80/GX85 遥控说明](https://av.jpn.support.panasonic.com/support/spn/global/dsc/help/image_app/en/camera/DMC-GX80_GX85/remote.html?no=1)：支持功能及模式限制。
 - [GMaster](https://github.com/Rambalac/GMaster)：第三方 GX85 支持记录，以及其握手、UDP 流形态的参考。

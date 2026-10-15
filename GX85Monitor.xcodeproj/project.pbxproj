@@ -5,6 +5,26 @@
 	};
 	objectVersion = 56;
 	objects = {
+		E335E13A9B38A17E1CE88364 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/App/CameraAlbumModel.swift";
+			sourceTree = "<group>";
+		};
+		DE48EA255BB12554584A46C7 = {
+			isa = "PBXBuildFile";
+			fileRef = E335E13A9B38A17E1CE88364;
+		};
+		86D20FC235CE510BA99EF67E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/App/CameraDebugFixture.swift";
+			sourceTree = "<group>";
+		};
+		51AE78B14478A5CA6212AF10 = {
+			isa = "PBXBuildFile";
+			fileRef = 86D20FC235CE510BA99EF67E;
+		};
 		035C6E5A08AD8D1B17A29ADF = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "sourcecode.swift";
@@ -45,6 +65,16 @@
 			isa = "PBXBuildFile";
 			fileRef = 61DC15DF936FDFFB421F984E;
 		};
+		C14C84F472328BBAC233DF23 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/CameraControlService.swift";
+			sourceTree = "<group>";
+		};
+		F39E3757D53D982B74D63689 = {
+			isa = "PBXBuildFile";
+			fileRef = C14C84F472328BBAC233DF23;
+		};
 		A6134C6332BEC8DA9CB2C4DA = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "sourcecode.swift";
@@ -54,6 +84,36 @@
 		A8C3CAE52B183737235274A1 = {
 			isa = "PBXBuildFile";
 			fileRef = A6134C6332BEC8DA9CB2C4DA;
+		};
+		A5C4F0EE49C58814AA190C2E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/CameraMediaClient.swift";
+			sourceTree = "<group>";
+		};
+		2E2BD7CB75485BAFC9D783C8 = {
+			isa = "PBXBuildFile";
+			fileRef = A5C4F0EE49C58814AA190C2E;
+		};
+		F43A35B78482BFE9E04A9570 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/CameraParameterService.swift";
+			sourceTree = "<group>";
+		};
+		794786EF07877BC56A53845B = {
+			isa = "PBXBuildFile";
+			fileRef = F43A35B78482BFE9E04A9570;
+		};
+		70BE0E9046AD671CA530AF96 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Camera/CameraThumbnailLoader.swift";
+			sourceTree = "<group>";
+		};
+		FBF07FD01F48910BDB42081A = {
+			isa = "PBXBuildFile";
+			fileRef = 70BE0E9046AD671CA530AF96;
 		};
 		29C932A3C5DC15E38DE3A135 = {
 			isa = "PBXFileReference";
@@ -85,6 +145,76 @@
 			isa = "PBXBuildFile";
 			fileRef = 06094EF78102773740A2E86D;
 		};
+		41187209D1820D89E32AA356 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Media/CameraVideoPreviewModel.swift";
+			sourceTree = "<group>";
+		};
+		6A597C538D120E5B86D296C1 = {
+			isa = "PBXBuildFile";
+			fileRef = 41187209D1820D89E32AA356;
+		};
+		F90555B582BC3209126083B0 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Media/MediaDownloadService.swift";
+			sourceTree = "<group>";
+		};
+		72BD00E361DBEBD458D167A1 = {
+			isa = "PBXBuildFile";
+			fileRef = F90555B582BC3209126083B0;
+		};
+		F0E620204AF60487A1D45F91 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Media/MediaExportCoordinator.swift";
+			sourceTree = "<group>";
+		};
+		12075618844982A454B592A5 = {
+			isa = "PBXBuildFile";
+			fileRef = F0E620204AF60487A1D45F91;
+		};
+		7E2B74CC5F2B78811C7E9ACB = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Media/PhotoLibraryWriter.swift";
+			sourceTree = "<group>";
+		};
+		AE56C29F053D8B3A93882864 = {
+			isa = "PBXBuildFile";
+			fileRef = 7E2B74CC5F2B78811C7E9ACB;
+		};
+		92D72F1C7CEF76966747974E = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/CameraAlbumView.swift";
+			sourceTree = "<group>";
+		};
+		42295561537B2B913C2B4148 = {
+			isa = "PBXBuildFile";
+			fileRef = 92D72F1C7CEF76966747974E;
+		};
+		DF7DDC8545724F95D01BC6F5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/CameraMediaPreview.swift";
+			sourceTree = "<group>";
+		};
+		03ADCA8B54CEB4C86138A815 = {
+			isa = "PBXBuildFile";
+			fileRef = DF7DDC8545724F95D01BC6F5;
+		};
+		E919219D4323A2925486CA1B = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/CameraParameterBar.swift";
+			sourceTree = "<group>";
+		};
+		DB4D0BCA98E121586A73142A = {
+			isa = "PBXBuildFile";
+			fileRef = E919219D4323A2925486CA1B;
+		};
 		09D539B42359ED2BF3BB6DB2 = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "sourcecode.swift";
@@ -114,6 +244,36 @@
 		6F47FFA58F45952A6487DB21 = {
 			isa = "PBXBuildFile";
 			fileRef = 9B53DB1260148266EB408D5D;
+		};
+		8F985C8BB325EDC2B10E8467 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/FileExportSheet.swift";
+			sourceTree = "<group>";
+		};
+		DFB47BA643EA6447899D4F61 = {
+			isa = "PBXBuildFile";
+			fileRef = 8F985C8BB325EDC2B10E8467;
+		};
+		AC38D369E54859CB8C54D902 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/MediaExportView.swift";
+			sourceTree = "<group>";
+		};
+		2C3C29E81C5D442575665C0D = {
+			isa = "PBXBuildFile";
+			fileRef = AC38D369E54859CB8C54D902;
+		};
+		08056FC2E789D827B92900B1 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85Monitor/Views/NoticeOverlay.swift";
+			sourceTree = "<group>";
+		};
+		096A0766B5BC3ADAE468D3D9 = {
+			isa = "PBXBuildFile";
+			fileRef = 08056FC2E789D827B92900B1;
 		};
 		5629D32248BCEE5DA4202F43 = {
 			isa = "PBXFileReference";
@@ -147,9 +307,59 @@
 		};
 		CF8D0BD4B75E8C2C174692A5 = {
 			isa = "PBXGroup";
-			children = (035C6E5A08AD8D1B17A29ADF, 72CEF7CF8540814B72C2778F, ECDB0C50A5AF125459948D5C, 61DC15DF936FDFFB421F984E, A6134C6332BEC8DA9CB2C4DA, 29C932A3C5DC15E38DE3A135, 921A85E3554B516F0402E5AC, 06094EF78102773740A2E86D, 09D539B42359ED2BF3BB6DB2, D9CB6E0131EB75810E7B3CD4, 9B53DB1260148266EB408D5D, 5629D32248BCEE5DA4202F43, D260DE2D63E403E61F85BA04, 80927C68FA0B7F2AE37F40BC, 8119A4784A182D847E337D77, 13A03CFFEE26A9B9A367DAD9,);
+			children = (E335E13A9B38A17E1CE88364, 86D20FC235CE510BA99EF67E, 035C6E5A08AD8D1B17A29ADF, 72CEF7CF8540814B72C2778F, ECDB0C50A5AF125459948D5C, 61DC15DF936FDFFB421F984E, C14C84F472328BBAC233DF23, A6134C6332BEC8DA9CB2C4DA, A5C4F0EE49C58814AA190C2E, F43A35B78482BFE9E04A9570, 70BE0E9046AD671CA530AF96, 29C932A3C5DC15E38DE3A135, 921A85E3554B516F0402E5AC, 06094EF78102773740A2E86D, 41187209D1820D89E32AA356, F90555B582BC3209126083B0, F0E620204AF60487A1D45F91, 7E2B74CC5F2B78811C7E9ACB, 92D72F1C7CEF76966747974E, DF7DDC8545724F95D01BC6F5, E919219D4323A2925486CA1B, 09D539B42359ED2BF3BB6DB2, D9CB6E0131EB75810E7B3CD4, 9B53DB1260148266EB408D5D, 8F985C8BB325EDC2B10E8467, AC38D369E54859CB8C54D902, 08056FC2E789D827B92900B1, 5629D32248BCEE5DA4202F43, D260DE2D63E403E61F85BA04, 80927C68FA0B7F2AE37F40BC, 8119A4784A182D847E337D77, 13A03CFFEE26A9B9A367DAD9,);
 			name = "GX85Monitor";
 			sourceTree = "<group>";
+		};
+		4812D59B98BDC5AB9146CA81 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraAlbumModelTests.swift";
+			sourceTree = "<group>";
+		};
+		4A1EBD85B4C85B9087372EB2 = {
+			isa = "PBXBuildFile";
+			fileRef = 4812D59B98BDC5AB9146CA81;
+		};
+		C0BC90A9CD8F2332223D132F = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraControlServiceTests.swift";
+			sourceTree = "<group>";
+		};
+		67E0796EF713F78E5E7B03D3 = {
+			isa = "PBXBuildFile";
+			fileRef = C0BC90A9CD8F2332223D132F;
+		};
+		DD58BBED9F36DDF35C692392 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraMediaClientTests.swift";
+			sourceTree = "<group>";
+		};
+		E95D38E07B1C3F2B5B4ED8A4 = {
+			isa = "PBXBuildFile";
+			fileRef = DD58BBED9F36DDF35C692392;
+		};
+		6AA0C474142678E3449579E4 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraParameterTests.swift";
+			sourceTree = "<group>";
+		};
+		C495E8B5CE037F43BBCFC1C9 = {
+			isa = "PBXBuildFile";
+			fileRef = 6AA0C474142678E3449579E4;
+		};
+		156A8BEFD51E234D78941B6B = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/CameraPreviewLayoutTests.swift";
+			sourceTree = "<group>";
+		};
+		1E4D6C63618C0CA797E550B1 = {
+			isa = "PBXBuildFile";
+			fileRef = 156A8BEFD51E234D78941B6B;
 		};
 		40E6E239EAB1561138FF8532 = {
 			isa = "PBXFileReference";
@@ -171,6 +381,46 @@
 			isa = "PBXBuildFile";
 			fileRef = 3DD6FE38F99A827C540B29B8;
 		};
+		C1FCE3D80C3526C6301BA762 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/FocusMappingTests.swift";
+			sourceTree = "<group>";
+		};
+		C60CF3342CE3E5CB0E355E66 = {
+			isa = "PBXBuildFile";
+			fileRef = C1FCE3D80C3526C6301BA762;
+		};
+		3E3CD06AF44FE4CA13B31AB2 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/MediaDownloadTests.swift";
+			sourceTree = "<group>";
+		};
+		CBF9DDE30C88827940CDFE70 = {
+			isa = "PBXBuildFile";
+			fileRef = 3E3CD06AF44FE4CA13B31AB2;
+		};
+		045FE6744637C160761FC8E3 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/MediaExportCoordinatorTests.swift";
+			sourceTree = "<group>";
+		};
+		F3394F32617A0E8144DFE458 = {
+			isa = "PBXBuildFile";
+			fileRef = 045FE6744637C160761FC8E3;
+		};
+		F239EF4001583BC84767EA37 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorTests/PhotoLibraryWriterTests.swift";
+			sourceTree = "<group>";
+		};
+		7DEA1F9972EC3278F86C9BBA = {
+			isa = "PBXBuildFile";
+			fileRef = F239EF4001583BC84767EA37;
+		};
 		980E0340A5E3504C560C26AB = {
 			isa = "PBXFileReference";
 			lastKnownFileType = "sourcecode.swift";
@@ -183,8 +433,34 @@
 		};
 		EEFE21A1443933CA4DE017DA = {
 			isa = "PBXGroup";
-			children = (40E6E239EAB1561138FF8532, 3DD6FE38F99A827C540B29B8, 980E0340A5E3504C560C26AB,);
+			children = (4812D59B98BDC5AB9146CA81, C0BC90A9CD8F2332223D132F, DD58BBED9F36DDF35C692392, 6AA0C474142678E3449579E4, 156A8BEFD51E234D78941B6B, 40E6E239EAB1561138FF8532, 3DD6FE38F99A827C540B29B8, C1FCE3D80C3526C6301BA762, 3E3CD06AF44FE4CA13B31AB2, 045FE6744637C160761FC8E3, F239EF4001583BC84767EA37, 980E0340A5E3504C560C26AB,);
 			name = "GX85MonitorTests";
+			sourceTree = "<group>";
+		};
+		493DA22ACFB05F6208EEC4B5 = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorUITests/CameraInteractionUITests.swift";
+			sourceTree = "<group>";
+		};
+		4D327123198A9EFB46C377ED = {
+			isa = "PBXBuildFile";
+			fileRef = 493DA22ACFB05F6208EEC4B5;
+		};
+		608DD55C2B54316F66CBF09D = {
+			isa = "PBXFileReference";
+			lastKnownFileType = "sourcecode.swift";
+			path = "GX85MonitorUITests/CameraPresentationUITests.swift";
+			sourceTree = "<group>";
+		};
+		90FC84D96D6B2093E4A5A03A = {
+			isa = "PBXBuildFile";
+			fileRef = 608DD55C2B54316F66CBF09D;
+		};
+		AE732EC76C6881743F80375B = {
+			isa = "PBXGroup";
+			children = (493DA22ACFB05F6208EEC4B5, 608DD55C2B54316F66CBF09D,);
+			name = "GX85MonitorUITests";
 			sourceTree = "<group>";
 		};
 		8119A4784A182D847E337D77 = {
@@ -217,15 +493,22 @@
 			path = "GX85MonitorTests.xctest";
 			sourceTree = "BUILT_PRODUCTS_DIR";
 		};
+		2DC2D7827160987765974061 = {
+			isa = "PBXFileReference";
+			explicitFileType = "wrapper.cfbundle";
+			includeInIndex = 0;
+			path = "GX85MonitorUITests.xctest";
+			sourceTree = "BUILT_PRODUCTS_DIR";
+		};
 		00C45FD35CB0F9C5F764F070 = {
 			isa = "PBXGroup";
-			children = (B6CDB6E5D160E013280D3C68, E02A90D9643568EA39115CFB,);
+			children = (B6CDB6E5D160E013280D3C68, E02A90D9643568EA39115CFB, 2DC2D7827160987765974061,);
 			name = "Products";
 			sourceTree = "<group>";
 		};
 		ADCF10F76EBF2A74473E9DC4 = {
 			isa = "PBXGroup";
-			children = (CF8D0BD4B75E8C2C174692A5, EEFE21A1443933CA4DE017DA, 00C45FD35CB0F9C5F764F070,);
+			children = (CF8D0BD4B75E8C2C174692A5, EEFE21A1443933CA4DE017DA, AE732EC76C6881743F80375B, 00C45FD35CB0F9C5F764F070,);
 			sourceTree = "<group>";
 		};
 		E1823BFFAEB4E505466451C6 = {
@@ -256,7 +539,7 @@
 		3BE5C704148406E58FE0AB5F = {
 			isa = "PBXSourcesBuildPhase";
 			buildActionMask = 2147483647;
-			files = (014CFE1EC91ABD1D1BC19DB9, 1A47D4D7DD0A053F5B7538B0, 05FD725CC6916154F29A8044, 629C177A6CEA9D2EB456E0BA, A8C3CAE52B183737235274A1, 764F717AD1F99A914E166B10, 88F4D28557744E65589E39B1, 83D74A8131A5BB93970318DB, A738E05D492448C83456E9CC, 8F674E4E630B4BF2F04DF4E4, 6F47FFA58F45952A6487DB21, 7E3C003F2405E376C92FA338, A5C269985C0BC4DF8B9EAE27, B01446DF14845EE9CB256589,);
+			files = (DE48EA255BB12554584A46C7, 51AE78B14478A5CA6212AF10, 014CFE1EC91ABD1D1BC19DB9, 1A47D4D7DD0A053F5B7538B0, 05FD725CC6916154F29A8044, 629C177A6CEA9D2EB456E0BA, F39E3757D53D982B74D63689, A8C3CAE52B183737235274A1, 2E2BD7CB75485BAFC9D783C8, 794786EF07877BC56A53845B, FBF07FD01F48910BDB42081A, 764F717AD1F99A914E166B10, 88F4D28557744E65589E39B1, 83D74A8131A5BB93970318DB, 6A597C538D120E5B86D296C1, 72BD00E361DBEBD458D167A1, 12075618844982A454B592A5, AE56C29F053D8B3A93882864, 42295561537B2B913C2B4148, 03ADCA8B54CEB4C86138A815, DB4D0BCA98E121586A73142A, A738E05D492448C83456E9CC, 8F674E4E630B4BF2F04DF4E4, 6F47FFA58F45952A6487DB21, DFB47BA643EA6447899D4F61, 2C3C29E81C5D442575665C0D, 096A0766B5BC3ADAE468D3D9, 7E3C003F2405E376C92FA338, A5C269985C0BC4DF8B9EAE27, B01446DF14845EE9CB256589,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		112EFB9CA2188A3E624E2389 = {
@@ -283,7 +566,25 @@
 		1A2AAFC871EB5C3BDDDDE160 = {
 			isa = "PBXSourcesBuildPhase";
 			buildActionMask = 2147483647;
-			files = (A0DE1017FE51E3D6F09D8F8A, 516E1FC6000A644269BD1185, 8C8CE8E8529019258333363A,);
+			files = (4A1EBD85B4C85B9087372EB2, 67E0796EF713F78E5E7B03D3, E95D38E07B1C3F2B5B4ED8A4, C495E8B5CE037F43BBCFC1C9, 1E4D6C63618C0CA797E550B1, A0DE1017FE51E3D6F09D8F8A, 516E1FC6000A644269BD1185, C60CF3342CE3E5CB0E355E66, CBF9DDE30C88827940CDFE70, F3394F32617A0E8144DFE458, 7DEA1F9972EC3278F86C9BBA, 8C8CE8E8529019258333363A,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		017AABD8993651F6890C6581 = {
+			isa = "PBXFrameworksBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CAA9B2196E7DE413F24A268F = {
+			isa = "PBXResourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		555FA5437BD8B4C902B86053 = {
+			isa = "PBXSourcesBuildPhase";
+			buildActionMask = 2147483647;
+			files = (4D327123198A9EFB46C377ED, 90FC84D96D6B2093E4A5A03A,);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		D36D33020B6BB89396BD1B34 = {
@@ -347,8 +648,8 @@
 				INFOPLIST_FILE = "GX85Monitor/Info.plist";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
-				CURRENT_PROJECT_VERSION = "1";
-				MARKETING_VERSION = "0.1.0";
+				CURRENT_PROJECT_VERSION = "5";
+				MARKETING_VERSION = "0.2.5";
 			};
 			name = "Debug";
 		};
@@ -366,8 +667,8 @@
 				INFOPLIST_FILE = "GX85Monitor/Info.plist";
 				ASSETCATALOG_COMPILER_APPICON_NAME = "AppIcon";
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = "AccentColor";
-				CURRENT_PROJECT_VERSION = "1";
-				MARKETING_VERSION = "0.1.0";
+				CURRENT_PROJECT_VERSION = "5";
+				MARKETING_VERSION = "0.2.5";
 			};
 			name = "Release";
 		};
@@ -415,6 +716,42 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = "Release";
 		};
+		111EB5BDEFC905F833F7FBD1 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gx85monitor.uitests";
+				TARGETED_DEVICE_FAMILY = "1";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				CODE_SIGN_STYLE = "Automatic";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_TARGET_NAME = "GX85Monitor";
+			};
+			name = "Debug";
+		};
+		1BFC40A8F20BC35A65CAD464 = {
+			isa = "XCBuildConfiguration";
+			buildSettings = {
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.gx85monitor.uitests";
+				TARGETED_DEVICE_FAMILY = "1";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				CODE_SIGN_STYLE = "Automatic";
+				SWIFT_EMIT_LOC_STRINGS = "YES";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				GENERATE_INFOPLIST_FILE = "YES";
+				TEST_TARGET_NAME = "GX85Monitor";
+			};
+			name = "Release";
+		};
+		A703BABEAF536FCAD8A95716 = {
+			isa = "XCConfigurationList";
+			buildConfigurations = (111EB5BDEFC905F833F7FBD1, 1BFC40A8F20BC35A65CAD464,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = "Release";
+		};
 		29C7B681C8D62CBAC94D51C0 = {
 			isa = "PBXNativeTarget";
 			buildConfigurationList = 9EA62D25DFD1EFBA21F6DE7B;
@@ -439,6 +776,18 @@
 			productReference = E02A90D9643568EA39115CFB;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		CEFEF1F5CE13C5A04BC4C468 = {
+			isa = "PBXNativeTarget";
+			buildConfigurationList = A703BABEAF536FCAD8A95716;
+			buildPhases = (555FA5437BD8B4C902B86053, 017AABD8993651F6890C6581, CAA9B2196E7DE413F24A268F,);
+			buildRules = ();
+			dependencies = (D2F9C6ACC3CFD758A2AF1D96,);
+			name = "GX85MonitorUITests";
+			packageProductDependencies = ();
+			productName = "GX85MonitorUITests";
+			productReference = 2DC2D7827160987765974061;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		98F54143AB4E86B28C3AFEE0 = {
 			isa = "PBXProject";
 			attributes = {
@@ -450,6 +799,10 @@
 						CreatedOnToolsVersion = "16.0";
 					};
 					7EC8F98B7A265120217712DE = {
+						CreatedOnToolsVersion = "16.0";
+						TestTargetID = 29C7B681C8D62CBAC94D51C0;
+					};
+					CEFEF1F5CE13C5A04BC4C468 = {
 						CreatedOnToolsVersion = "16.0";
 						TestTargetID = 29C7B681C8D62CBAC94D51C0;
 					};
@@ -465,7 +818,7 @@
 			productRefGroup = 00C45FD35CB0F9C5F764F070;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (29C7B681C8D62CBAC94D51C0, 7EC8F98B7A265120217712DE,);
+			targets = (29C7B681C8D62CBAC94D51C0, 7EC8F98B7A265120217712DE, CEFEF1F5CE13C5A04BC4C468,);
 		};
 	};
 	rootObject = 98F54143AB4E86B28C3AFEE0;

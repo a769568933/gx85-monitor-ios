@@ -1,0 +1,350 @@
+import Foundation
+import XCTest
+import GX85Core
+@testable import GX85Monitor
+
+final class CameraControlServiceTests: XCTestCase {
+    func testSignedShutterWriteAcceptsEquivalentUnsigned16BitReadback() async throws {
+        let camera = UnsignedShutterCamera()
+        try await CameraControlService(client: camera).setParameter(.shutter, rawValue: "-1536/256")
+        let writes = await camera.writes
+        XCTAssertEqual(writes, 1)
+    }
+
+    func testUnsignedFiniteSingleExposureIsNotCanceledAfter100ms() async {
+        let camera = CaptureDriveCamera(drive: "normal", shutter: "64000/256")
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        _ = await controls.capturePhoto()
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.releaseCapture))
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+    }
+
+    func testConfirmedNormalDriveDoesNotCancelSingleElectronicExposureAfter100ms() async {
+        let camera = CaptureDriveCamera(drive: "normal", shutter: "1451/256")
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let result = await controls.capturePhoto()
+        XCTAssertEqual(result, .acceptedUnconfirmed)
+        let calls = await camera.calls
+        XCTAssertTrue(calls.contains(.getInfo("curmenu")))
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertFalse(calls.contains(.releaseCapture), "A confirmed single exposure must finish in-camera instead of being canceled at 100ms")
+    }
+
+    func testBurstAndBulbStillReleaseInsteadOfLeavingShutterHeld() async {
+        for (drive, shutter) in [("burst", "1451/256"), ("normal", "16384/256")] {
+            let camera = CaptureDriveCamera(drive: drive, shutter: shutter)
+            let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+            _ = await controls.capturePhoto()
+            let calls = await camera.calls
+            XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+            XCTAssertEqual(calls.filter { $0 == .releaseCapture }.count, 1)
+        }
+    }
+
+    func testCaptureMetadataTimeoutDoesNotSubmitOrRepeatShutter() async {
+        let camera = CaptureDriveCamera(drive: "normal", shutter: "1451/256", metadataTimeout: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let result = await controls.capturePhoto()
+        XCTAssertEqual(result, .unknown)
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.capture))
+    }
+
+    func testGX85TouchFocusUsesNewTouchProtocolRatherThanLegacyTouchAF() async throws {
+        let camera = ControlCamera(.autoFocus)
+        try await service(camera).focus(at: CGPoint(x: 0.25, y: 0.75))
+        let calls = await camera.calls
+        let command = try XCTUnwrap(calls.first { if case .touchFocus = $0 { return true }; return false })
+        let url = try command.makeURL(endpoint: CameraEndpoint(host: "192.168.54.1"))
+        let query = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertEqual(query, [URLQueryItem(name: "mode", value: "camctrl"), URLQueryItem(name: "type", value: "touch"), URLQueryItem(name: "value", value: "250/750"), URLQueryItem(name: "value2", value: "on")])
+        XCTAssertFalse(calls.contains(.capture))
+        XCTAssertFalse(calls.contains(.autoFocus))
+    }
+
+    func testGX85PlaybackWithoutRecFieldCanRestoreMonitoring() async throws {
+        let camera = FieldPlaybackCamera(inPlayback: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let state = try await controls.leavePlayback(port: 49152)
+        XCTAssertEqual(state.rawFields["cammode"], "rec")
+        XCTAssertEqual(state.recordingState, .stopped)
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .recordMode }.count, 1)
+        XCTAssertEqual(calls.filter { $0 == .startStream(port: 49152) }.count, 1)
+        XCTAssertFalse(calls.contains(.videoStop))
+    }
+
+    func testPlaybackEntryWaitsForPlayInsteadOfAcceptingGX85RecAlias() async throws {
+        let camera = FieldPlaybackCamera(inPlayback: false, delayedEntry: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        let state = try await controls.enterPlayback()
+        XCTAssertEqual(state.rawFields["cammode"], "play")
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .state }.count, 4)
+    }
+
+    func testPlaybackRestoreDoesNotStartStreamWhileCameraStillReportsPlay() async {
+        let camera = FieldPlaybackCamera(inPlayback: true, rejectsExit: true)
+        let controls = CameraControlService(client: camera, sleep: { _ in await Task.yield() })
+        do { _ = try await controls.leavePlayback(port: 49152); XCTFail("Play acknowledgment must not count as record-mode transition") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.startStream(port: 49152)))
+    }
+
+    func testGX85ZeroRemainingCapacityPreventsShutter() async {
+        let camera = ControlCamera(.gx85FullCard)
+        let result = await service(camera).capturePhoto()
+        guard case .rejected = result else { return XCTFail("GX85 remaincapacity=0 must block capture") }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.capture))
+    }
+
+    func testUnknownRecordingDoesNotMutateModeWhenRestoringPlayback() async {
+        let camera = ControlCamera(.unknownRecording)
+        do { _ = try await service(camera).leavePlayback(port: 49152); XCTFail("Unknown recording state must not switch camera mode") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.recordMode))
+        XCTAssertFalse(calls.contains(.videoStop))
+    }
+    func testTapFocusPreservesMFAndNeverTriggersCapture() async {
+        let camera = ControlCamera(.ackOnly)
+        do { try await service(camera).focus(at: CGPoint(x: 0.5, y: 0.5)); XCTFail("MF must not request touch autofocus") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.capture))
+        XCTAssertFalse(calls.contains(.touchFocus(x: 500, y: 500)))
+    }
+
+    func testTapAutofocusSendsPositionWithoutTouchShutter() async throws {
+        let camera = ControlCamera(.autoFocus)
+        try await service(camera).focus(at: CGPoint(x: 0.25, y: 0.75))
+        let calls = await camera.calls
+        XCTAssertTrue(calls.contains(.touchFocus(x: 250, y: 750)))
+        XCTAssertFalse(calls.contains(.capture))
+    }
+    private func service(_ camera: ControlCamera) -> CameraControlService {
+        CameraControlService(client: camera, sleep: { _ in try Task.checkCancellation(); await Task.yield() })
+    }
+
+    func testOKWithUnchangedStateDoesNotConfirmSavedPhoto() async {
+        let camera = ControlCamera(.ackOnly)
+        let result = await service(camera).capturePhoto()
+        XCTAssertEqual(result, .acceptedUnconfirmed)
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertEqual(calls.filter { $0 == .releaseCapture }.count, 1)
+    }
+
+    func testTimeoutNeverRetriesCapture() async {
+        let camera = ControlCamera(.timeout)
+        let result = await service(camera).capturePhoto()
+        XCTAssertEqual(result, .unknown)
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+    }
+
+    func testBusyAndCardErrorsDoNotSendShutter() async {
+        for scenario in [ControlCamera.Scenario.busy, .cardMissing, .unknownRecording] {
+            let camera = ControlCamera(scenario)
+            let result = await service(camera).capturePhoto()
+            guard case .rejected = result else { XCTFail("Unsafe preflight must reject: \(scenario)"); continue }
+            let calls = await camera.calls
+            XCTAssertFalse(calls.contains(.capture))
+        }
+    }
+
+    func testCaptureUsesCameraFocusPriorityWithoutSeparateAFCommand() async {
+        for scenario in [ControlCamera.Scenario.autoFocus, .ackOnly] {
+            let camera = ControlCamera(scenario)
+            _ = await service(camera).capturePhoto()
+            let calls = await camera.calls
+            XCTAssertFalse(calls.contains(.autoFocus))
+            XCTAssertFalse(calls.contains(.getSetting("focusmode")))
+            XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+            XCTAssertFalse(calls.contains { if case .setSetting(type: "focusmode", value: _) = $0 { return true }; return false })
+        }
+    }
+
+    func testUnsupportedOneShotAFDoesNotBlockGX80Capture() async {
+        // The user's GX80 log reports focusmode=afs, followed by oneshot_af err_reject.
+        let camera = ControlCamera(.unsupportedAF)
+        let result = await service(camera).capturePhoto()
+        XCTAssertEqual(result, .acceptedUnconfirmed)
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.autoFocus))
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertEqual(calls.filter { $0 == .releaseCapture }.count, 1)
+    }
+
+    func testCameraRejectingCaptureForFocusIsNotOverriddenOrRetried() async {
+        let camera = ControlCamera(.captureFocusFailure)
+        let result = await service(camera).capturePhoto()
+        XCTAssertEqual(result, .rejected("err_focus"))
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+        XCTAssertFalse(calls.contains { if case .setSetting(type: "focusmode", value: _) = $0 { return true }; return false })
+    }
+
+    func testReleaseFailureDoesNotClaimConfirmedCapture() async {
+        let camera = ControlCamera(.releaseFailure)
+        let result = await service(camera).capturePhoto()
+        XCTAssertEqual(result, .unknown)
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .capture }.count, 1)
+    }
+
+    func testRecordingAckWithoutTransitionIsUnconfirmedAndSentOnce() async {
+        let camera = ControlCamera(.recordNoTransition)
+        do { _ = try await service(camera).setRecording(true); XCTFail("An ack alone must not confirm recording") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertEqual(calls.filter { $0 == .videoStart }.count, 1)
+        XCTAssertFalse(calls.contains(.capture))
+    }
+
+    func testRecordingStartStopUsesConfirmedCameraState() async throws {
+        let camera = ControlCamera(.recordConfirmed)
+        let controls = service(camera)
+        let started = try await controls.setRecording(true)
+        let stopped = try await controls.setRecording(false)
+        XCTAssertEqual(started, .recording)
+        XCTAssertEqual(stopped, .stopped)
+    }
+
+    func testAlreadyRecordingDoesNotSendAnotherStart() async throws {
+        let camera = ControlCamera(.alreadyRecording)
+        let state = try await service(camera).setRecording(true)
+        XCTAssertEqual(state, .recording)
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.videoStart))
+    }
+
+    func testHealthReadCannotInterleaveShutterTransaction() async throws {
+        let camera = ControlCamera(.slowCapture)
+        let controls = service(camera)
+        let capture = Task { await controls.capturePhoto() }
+        for _ in 0..<500 {
+            let started = await camera.captureStarted
+            if started { break }
+            await Task.yield()
+        }
+        let health = Task { try await controls.readState() }
+        _ = await capture.value
+        _ = try await health.value
+        let calls = await camera.calls
+        let shutter = try XCTUnwrap(calls.firstIndex(of: .capture))
+        XCTAssertEqual(calls[shutter + 1], .releaseCapture)
+    }
+
+    func testRejectedParameterChangeDoesNotPretendAccepted() async {
+        let camera = ControlCamera(.rejectParameter)
+        do { try await service(camera).setParameter(.iso, rawValue: "400"); XCTFail("Camera rejection must escape") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertTrue(calls.contains(.setSetting(type: "iso", value: "400")))
+    }
+}
+
+private actor CaptureDriveCamera: CommandSending {
+    let drive: String
+    let shutter: String
+    let metadataTimeout: Bool
+    private(set) var calls: [LumixCommand] = []
+    init(drive: String, shutter: String, metadataTimeout: Bool = false) {
+        self.drive = drive; self.shutter = shutter; self.metadataTimeout = metadataTimeout
+    }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        calls.append(command)
+        if command == .state {
+            return try LumixResponse.parse(data: Data("<camrply><result>ok</result><state><cammode>rec</cammode><rec>off</rec><sdcardstatus>write_enable</sdcardstatus><remaincapacity>4042</remaincapacity><sd_access>off</sd_access></state></camrply>".utf8))
+        }
+        if command == .getInfo("curmenu") {
+            if metadataTimeout { throw CommandError.timedOut }
+            return try LumixResponse.parseMenu(data: Data("<camrply><result>ok</result><menuinfo model=\"MC262\"><qmenu2><item id=\"menu_item_id_drivemode\" enable=\"yes\" value=\"\(drive)\"/></qmenu2></menuinfo></camrply>".utf8))
+        }
+        if command == .getSetting("shtrspeed") {
+            return LumixResponse(status: .success, fields: ["shtrspeed": shutter])
+        }
+        return LumixResponse(status: .success)
+    }
+}
+
+private actor UnsignedShutterCamera: CommandSending {
+    private(set) var writes = 0
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        if case .setSetting(type: "shtrspeed", value: "-1536/256") = command { writes += 1 }
+        return LumixResponse(status: .success, fields: ["shtrspeed": "64000/256"])
+    }
+}
+
+private actor ControlCamera: CommandSending {
+    enum Scenario: Equatable { case ackOnly, timeout, busy, cardMissing, gx85FullCard, unknownRecording, autoFocus, unsupportedAF, captureFocusFailure, releaseFailure, recordNoTransition, recordConfirmed, alreadyRecording, slowCapture, rejectParameter }
+    let scenario: Scenario
+    private(set) var calls: [LumixCommand] = []
+    private(set) var captureStarted = false
+    private var recording = false
+    init(_ scenario: Scenario) { self.scenario = scenario; recording = scenario == .alreadyRecording }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        calls.append(command)
+        if command == .state {
+            var fields = ["cammode": "recmode", "rec": recording ? "on" : "off", "sdcardstatus": "write_enable", "recremaincapacity": "42"]
+            if scenario == .busy { fields["busy"] = "on" }
+            if scenario == .cardMissing { fields["sdcardstatus"] = "no_card" }
+            if scenario == .unknownRecording { fields.removeValue(forKey: "rec") }
+            if scenario == .gx85FullCard {
+                fields.removeValue(forKey: "recremaincapacity")
+                fields["remaincapacity"] = "0"
+            }
+            return LumixResponse(status: .success, fields: fields)
+        }
+        if command == .getSetting("focusmode") {
+            return LumixResponse(status: .success, fields: ["focusmode": [.autoFocus, .unsupportedAF, .captureFocusFailure].contains(scenario) ? "afs" : "mf"])
+        }
+        if command == .autoFocus && scenario == .unsupportedAF { throw CommandError.cameraRejected("err_reject") }
+        if command == .capture {
+            captureStarted = true
+            if scenario == .captureFocusFailure { throw CommandError.cameraRejected("err_focus") }
+            if scenario == .timeout { throw CommandError.timedOut }
+            if scenario == .slowCapture { try await Task.sleep(nanoseconds: 50_000_000) }
+        }
+        if command == .releaseCapture && scenario == .releaseFailure { throw CommandError.cameraRejected("err_reject") }
+        if scenario == .recordConfirmed {
+            if command == .videoStart { recording = true }
+            if command == .videoStop { recording = false }
+        }
+        if case .setSetting = command, scenario == .rejectParameter { throw CommandError.cameraRejected("err_reject") }
+        return LumixResponse(status: .success)
+    }
+}
+
+/// Field reply shape: GX85 uses cammode=play and omits rec during playback.
+private actor FieldPlaybackCamera: CommandSending {
+    private var inPlayback: Bool
+    private let delayedEntry: Bool
+    private let rejectsExit: Bool
+    private var entryReads: Int?
+    private(set) var calls: [LumixCommand] = []
+    init(inPlayback: Bool, delayedEntry: Bool = false, rejectsExit: Bool = false) {
+        self.inPlayback = inPlayback; self.delayedEntry = delayedEntry; self.rejectsExit = rejectsExit
+    }
+    func send(_ command: LumixCommand) async throws -> LumixResponse {
+        calls.append(command)
+        if command == .playbackMode {
+            if delayedEntry { entryReads = 0 } else { inPlayback = true }
+        }
+        if command == .recordMode, !rejectsExit { inPlayback = false; entryReads = nil }
+        if command == .state {
+            if let reads = entryReads {
+                if reads >= 2 { inPlayback = true; entryReads = nil } else { entryReads = reads + 1 }
+            }
+            let xml = inPlayback
+                ? "<camrply><result>ok</result><state><cammode>play</cammode><play>stop</play><sd_access>off</sd_access></state></camrply>"
+                : "<camrply><result>ok</result><state><cammode>rec</cammode><rec>off</rec><remaincapacity>4041</remaincapacity><sd_access>off</sd_access></state></camrply>"
+            return try LumixResponse.parse(data: Data(xml.utf8))
+        }
+        return LumixResponse(status: .success)
+    }
+}

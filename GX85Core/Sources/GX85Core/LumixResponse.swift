@@ -11,15 +11,25 @@ public struct LumixResponse: Equatable, Sendable {
     public let status: Status
     public let fields: [String: String]
     public let summary: String
+    public let body: Data
 
-    public init(status: Status, fields: [String: String] = [:], summary: String = "") {
+    public init(status: Status, fields: [String: String] = [:], summary: String = "", body: Data = Data()) {
         self.status = status
         self.fields = fields
         self.summary = String(summary.prefix(512))
+        self.body = body
     }
 
     public static func parse(data: Data) throws -> LumixResponse {
-        guard data.count <= 256 * 1024,
+        try parse(data: data, maximumSize: 256 * 1024)
+    }
+
+    public static func parseMenu(data: Data) throws -> LumixResponse {
+        try parse(data: data, maximumSize: 2 * 1024 * 1024)
+    }
+
+    private static func parse(data: Data, maximumSize: Int) throws -> LumixResponse {
+        guard data.count <= maximumSize,
               let raw = String(data: data, encoding: .utf8) else { throw ResponseError.malformed }
         let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw ResponseError.malformed }
@@ -36,8 +46,10 @@ public struct LumixResponse: Equatable, Sendable {
             result = value
             fields = delegate.fields
         } else {
-            result = String(text.split(separator: ",", omittingEmptySubsequences: false)[0])
+            let tokens = text.split(separator: ",", omittingEmptySubsequences: false)
+            result = String(tokens[0])
                 .trimmingCharacters(in: .whitespacesAndNewlines)
+            if tokens.count == 2 { fields["value"] = String(tokens[1]).trimmingCharacters(in: .whitespacesAndNewlines) }
         }
         let token = result.lowercased()
         let status: Status
@@ -45,7 +57,7 @@ public struct LumixResponse: Equatable, Sendable {
         else if token == "err_wait" { status = .pendingApproval }
         else if token.hasPrefix("err_") { status = .rejected(token) }
         else { throw ResponseError.malformed }
-        return LumixResponse(status: status, fields: fields, summary: text)
+        return LumixResponse(status: status, fields: fields, summary: text, body: data)
     }
 }
 
@@ -64,6 +76,11 @@ private final class ReplyXMLParser: NSObject, XMLParserDelegate {
         if root == nil { root = elementName.lowercased() }
         path.append(elementName.lowercased())
         textStack.append("")
+        if path == ["camrply", "settingvalue"] {
+            for name in ["focusmode", "focal", "shtrspeed", "iso"] {
+                if let value = attributeDict[name] { fields[name] = value }
+            }
+        }
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {

@@ -3,6 +3,8 @@ import SwiftUI
 struct ConnectionGuideView: View {
     let phase: CameraSession.Phase
     let error: String?
+    let notice: String?
+    let clearNotice: () -> Void
     let connect: () -> Void
 
     var body: some View {
@@ -27,6 +29,7 @@ struct ConnectionGuideView: View {
                 if let error {
                     Text(error).font(.footnote).foregroundStyle(.yellow).fixedSize(horizontal: false, vertical: true)
                 }
+                if let notice { NoticeOverlay(message: notice, onDismiss: clearNotice) }
             }
             .frame(maxWidth: 330, alignment: .leading)
             .padding(24)

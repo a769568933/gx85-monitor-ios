@@ -22,6 +22,9 @@ if [[ ! -d "$GX_APP" || ! -x "$GX_APP/GX85Monitor" ]]; then
 fi
 GX_PLATFORM=$(/usr/libexec/PlistBuddy -c 'Print :DTPlatformName' "$GX_APP/Info.plist")
 [[ "$GX_PLATFORM" == 'iphoneos' ]] || { echo 'Refusing to package a simulator app.' >&2; exit 1; }
+GX_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$GX_APP/Info.plist")
+GX_BUILD=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$GX_APP/Info.plist")
+[[ "$GX_VERSION" == '0.2.5' && "$GX_BUILD" == '7' ]] || { echo 'Unexpected version.' >&2; exit 1; }
 lipo "$GX_APP/GX85Monitor" -verify_arch arm64
 mkdir -p "$GX_WORK/Payload"
 ditto "$GX_APP" "$GX_WORK/Payload/GX85Monitor.app"
@@ -30,3 +33,5 @@ GX_IPA="$GX_ROOT/dist/GX85Monitor-unsigned.ipa"
 (cd "$GX_WORK" && /usr/bin/zip -qr "$GX_IPA" Payload)
 /usr/bin/unzip -t "$GX_IPA"
 echo "Unsigned device IPA: $GX_IPA"
+shasum -a 256 "$GX_IPA" | tee "$GX_ROOT/dist/ipa-sha256.log"
+python3 "$GX_ROOT/scripts/export-test-screenshots.py"

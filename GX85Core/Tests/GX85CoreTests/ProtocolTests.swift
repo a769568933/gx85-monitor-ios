@@ -3,6 +3,18 @@ import XCTest
 @testable import GX85Core
 
 final class ProtocolTests: XCTestCase {
+    func testSettingValueAttributesPreserveCameraRawValues() throws {
+        let xml = "<camrply><result>ok</result><settingvalue focusmode=\"afs\" focal=\"392/256\" iso=\"400\"/></camrply>"
+        let response = try LumixResponse.parse(data: Data(xml.utf8))
+        XCTAssertEqual(response.fields["focusmode"], "afs")
+        XCTAssertEqual(response.fields["focal"], "392/256")
+        XCTAssertEqual(response.fields["iso"], "400")
+    }
+
+    func testTextSettingValueIsAvailableToParameterReadback() throws {
+        XCTAssertEqual(try LumixResponse.parse(data: Data("ok,400".utf8)).fields["value"], "400")
+    }
+
     func testRejectsInvalidIPv4AndZeroPort() throws {
         for host in ["", "camera.local", "256.1.1.1", "1.2.3", "1.2.3.4:80", "127.0.0.1/path", "1..2.3", "0.0.0.0", "255.255.255.255", "224.0.0.1"] {
             XCTAssertThrowsError(try CameraEndpoint(host: host), host)
