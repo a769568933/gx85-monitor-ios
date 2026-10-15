@@ -4,6 +4,16 @@ import GX85Core
 @testable import GX85Monitor
 
 final class CommandClientTests: XCTestCase {
+    func testMenuUsesSeparateBoundedBodyBudget() async throws {
+        let xml = "<camrply><result>ok</result><menuset><!--" + String(repeating: "x", count: 300_000) + "--></menuset></camrply>"
+        StubProtocol.set { _ in .reply(200, Data(xml.utf8)) }
+        let camera = try client()
+        let menu = try await camera.send(.getInfo("allmenu"))
+        XCTAssertEqual(menu.body, Data(xml.utf8))
+        do { _ = try await camera.send(.state); XCTFail("State replies must keep the smaller budget") }
+        catch is ResponseError { }
+    }
+
     override func tearDown() {
         StubProtocol.reset()
         super.tearDown()

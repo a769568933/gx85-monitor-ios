@@ -79,6 +79,23 @@ final class CameraSessionTests: XCTestCase {
         session.disconnect()
     }
 
+    func testUnknownVideoActionOnlyRefreshesStateBeforeMutatingCamera() async {
+        let commands = TestCommands()
+        await commands.setRecordingReadout(false)
+        let session = makeSession(commands)
+        session.connect()
+        await waitUntil { session.canCapture }
+        XCTAssertEqual(session.controlState.recordingState, .unknown)
+        await commands.setRecordingReadout(true)
+        session.selectShootingMode(.video)
+        session.performPrimaryAction()
+        await waitUntil { !session.actionInProgress }
+        let starts = await commands.videoStartCount
+        XCTAssertEqual(starts, 0)
+        XCTAssertEqual(session.controlState.recordingState, .stopped)
+        session.disconnect()
+    }
+
     func testVideoSelectionUsesVideoStartAndBackgroundDoesNotStopRecording() async {
         let commands = TestCommands()
         let session = makeSession(commands)
@@ -194,6 +211,7 @@ private actor TestCommands: CommandSending {
     var videoStartCount = 0
     var videoStopCount = 0
     private var recording = false
+    private var recordingReadout = true
     var accessWaiting = false
     var healthWaiting = false
     var healthCount = 0
@@ -206,6 +224,7 @@ private actor TestCommands: CommandSending {
     private var holdHealth = false
     private var healthContinuation: CheckedContinuation<Void, Never>?
     func holdAccess() { accessHeld = true }
+    func setRecordingReadout(_ available: Bool) { recordingReadout = available }
     func holdCapture() { captureHeld = true }
     func setCaptureError(_ error: Error) { captureError = error }
     func releaseAccess() { accessHeld = false; accessContinuation?.resume(); accessContinuation = nil }
@@ -234,7 +253,9 @@ private actor TestCommands: CommandSending {
             if captureHeld { await withCheckedContinuation { captureContinuation = $0 } }
             if let captureError { throw captureError }
         }
-        return LumixResponse(status: .success, fields: ["rec": recording ? "on" : "off", "focusmode": "mf"], summary: "ok")
+        var fields = ["focusmode": "mf"]
+        if recordingReadout { fields["rec"] = recording ? "on" : "off" }
+        return LumixResponse(status: .success, fields: fields, summary: "ok")
     }
 }
 
