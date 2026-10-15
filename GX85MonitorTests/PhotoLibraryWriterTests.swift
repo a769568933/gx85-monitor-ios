@@ -87,7 +87,7 @@ final class MediaSavingTests: XCTestCase {
         let model = MediaExportCoordinator(downloader: downloader)
         model.start(items()); await settle(model)
         model.savePhotos(using: writer)
-        for _ in 0..<200 { if await writer.started { break }; try? await Task.sleep(nanoseconds: 5_000_000) }
+        for _ in 0..<200 { if (await writer.started) { break }; try? await Task.sleep(nanoseconds: 5_000_000) }
         model.cancel()
         try? await Task.sleep(nanoseconds: 20_000_000)
         let duringSave = await downloader.discarded

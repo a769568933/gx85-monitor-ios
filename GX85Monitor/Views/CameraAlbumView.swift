@@ -8,10 +8,13 @@ struct CameraAlbumView: View {
     @StateObject private var thumbnails: CameraThumbnailLoader
     @State private var preview: CameraMediaItem?
     @State private var closing = false
+    @State private var showExport = false
+    @StateObject private var exporter: MediaExportCoordinator
     @Environment(\.dismiss) private var dismiss
     init(model: CameraAlbumModel, client: CameraMediaClient) {
         self.model = model; self.client = client
         _thumbnails = StateObject(wrappedValue: CameraThumbnailLoader(client: client))
+        _exporter = StateObject(wrappedValue: MediaExportCoordinator(downloader: MediaDownloadService(cameraHost: client.cameraHost)))
     }
     var body: some View {
         NavigationStack {
@@ -60,6 +63,8 @@ struct CameraAlbumView: View {
                     HStack {
                         Text("已选 \(model.selection.count) 项")
                         Spacer()
+                        Button("导出原文件") { showExport = true }.disabled(model.selection.isEmpty)
+                        Spacer()
                         if let total = model.totalMatches { Text("\(model.items.count) / \(total)") }
                     }.font(.caption).foregroundStyle(.secondary).padding(12)
                 }
@@ -77,6 +82,8 @@ struct CameraAlbumView: View {
         .task { model.loadNextPage() }
         .onChange(of: model.generation) { _ in thumbnails.reset() }
         .sheet(item: $preview) { CameraMediaPreview(item: $0, client: client) }
+        .sheet(isPresented: $showExport) { MediaExportView(model: exporter, items: model.selectedItems) }
+        .onDisappear { exporter.cancel() }
     }
 }
 

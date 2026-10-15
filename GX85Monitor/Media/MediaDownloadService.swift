@@ -57,7 +57,7 @@ actor MediaDownloadService: MediaDownloading {
         guard availableBytes() >= required + Self.reserveBytes else { throw MediaDownloadError.insufficientSpace }
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         let ext: String
-        switch resource.mimeType { case "image/jpeg": ext = "JPG"; case "video/mp4": ext = "MP4"; case "image/x-panasonic-raw": ext = "RW2"; default: ext = "bin" }
+        switch resource.mimeType { case "image/jpeg": ext = "JPG"; case "video/mp4": ext = "MP4"; case "image/x-panasonic-raw", "image/x-panasonic-rw2": ext = "RW2"; default: ext = "bin" }
         let destination = root.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
         let cancellation = DownloadCancellation()
         progress(nil)
