@@ -10,7 +10,7 @@ final class CameraSessionTests: XCTestCase {
         let defaults = UserDefaults(suiteName: UUID().uuidString)!
         let settings = CameraSettings(defaults: defaults)
         settings.accessID = "test-camera-uuid"
-        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { 0 }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() })
+        return CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { 0 }, sleep: { _ in try await Task.sleep(nanoseconds: 60_000_000_000) }, controlSleep: { _ in try Task.checkCancellation(); await Task.yield() }, makeMediaClient: { CameraMediaClient(endpoint: $0) })
     }
 
     private func waitUntil(_ predicate: () -> Bool) async {
@@ -37,6 +37,63 @@ final class CameraSessionTests: XCTestCase {
         XCTAssertEqual(session.phase, .disconnected)
         XCTAssertFalse(session.wantsConnection)
         XCTAssertFalse(session.canCapture)
+    }
+
+    func testPlaybackChecksFreshRecordingStateBeforeStoppingStream() async {
+        let commands = TestCommands()
+        let session = makeSession(commands)
+        session.connect()
+        await waitUntil { session.canCapture }
+        await commands.setBodyRecording(true)
+        do { _ = try await session.beginPlayback(); XCTFail("A newly started body recording must block playback") }
+        catch { }
+        let playback = await commands.playbackCount
+        let stops = await commands.stopStreamCount
+        XCTAssertEqual(playback, 0)
+        XCTAssertEqual(stops, 0)
+        XCTAssertFalse(session.isBrowsing)
+        session.disconnect()
+    }
+
+    func testClosingPlaybackRestoresRecordModeAndReceiver() async throws {
+        let commands = TestCommands()
+        let receiver = TestReceiver()
+        let session = makeSession(commands, receiver: receiver)
+        session.connect()
+        await waitUntil { session.canCapture }
+        _ = try await session.beginPlayback()
+        XCTAssertTrue(session.isBrowsing)
+        XCTAssertFalse(session.canCapture)
+        XCTAssertGreaterThan(receiver.stops, 0)
+        await session.endPlayback()
+        XCTAssertFalse(session.isBrowsing)
+        XCTAssertTrue(session.canCapture)
+        XCTAssertEqual(receiver.starts, 2)
+        let recordModes = await commands.recordModeCount
+        let streams = await commands.startStreamCount
+        XCTAssertEqual(recordModes, 2)
+        XCTAssertEqual(streams, 2)
+        session.disconnect()
+    }
+
+    func testPlaybackWatchdogDoesNotReenterRecordMode() async throws {
+        let time = ManualClock()
+        let commands = TestCommands()
+        let receiver = TestReceiver()
+        let settings = CameraSettings(defaults: UserDefaults(suiteName: UUID().uuidString)!)
+        settings.accessID = "playback-clock-test"
+        let session = CameraSession(settings: settings, makeClient: { _ in commands }, makeReceiver: { receiver }, clock: { time.now }, sleep: { try await time.sleep($0) }, makeMediaClient: { CameraMediaClient(endpoint: $0) })
+        session.connect()
+        await waitUntil { session.canCapture }
+        _ = try await session.beginPlayback()
+        await time.advance(to: 30)
+        for _ in 0..<100 { await Task.yield() }
+        XCTAssertTrue(session.isBrowsing)
+        XCTAssertEqual(receiver.starts, 1)
+        let modes = await commands.recordModeCount
+        XCTAssertEqual(modes, 1)
+        await session.endPlayback()
+        session.disconnect()
     }
 
     func testBackgroundStopsReceiverAndForegroundResumesOnlyWhenWanted() async {
@@ -210,6 +267,11 @@ private actor TestCommands: CommandSending {
     var captureCount = 0
     var videoStartCount = 0
     var videoStopCount = 0
+    var playbackCount = 0
+    var stopStreamCount = 0
+    var startStreamCount = 0
+    var recordModeCount = 0
+    private var playback = false
     private var recording = false
     private var recordingReadout = true
     var accessWaiting = false
@@ -225,6 +287,7 @@ private actor TestCommands: CommandSending {
     private var healthContinuation: CheckedContinuation<Void, Never>?
     func holdAccess() { accessHeld = true }
     func setRecordingReadout(_ available: Bool) { recordingReadout = available }
+    func setBodyRecording(_ active: Bool) { recording = active }
     func holdCapture() { captureHeld = true }
     func setCaptureError(_ error: Error) { captureError = error }
     func releaseAccess() { accessHeld = false; accessContinuation?.resume(); accessContinuation = nil }
@@ -233,6 +296,10 @@ private actor TestCommands: CommandSending {
     func holdFailingHealth() { holdHealth = true }
     func releaseFailingHealth() { holdHealth = false; healthContinuation?.resume(); healthContinuation = nil }
     func send(_ command: LumixCommand) async throws -> LumixResponse {
+        if command == .playbackMode { playbackCount += 1; playback = true }
+        if command == .recordMode { recordModeCount += 1; playback = false }
+        if command == .stopStream { stopStreamCount += 1 }
+        if case .startStream = command { startStreamCount += 1 }
         if command == .videoStart { videoStartCount += 1; recording = true }
         if command == .videoStop { videoStopCount += 1; recording = false }
         if command == .state {
@@ -253,7 +320,7 @@ private actor TestCommands: CommandSending {
             if captureHeld { await withCheckedContinuation { captureContinuation = $0 } }
             if let captureError { throw captureError }
         }
-        var fields = ["focusmode": "mf"]
+        var fields = ["focusmode": "mf", "cammode": playback ? "playmode" : "recmode"]
         if recordingReadout { fields["rec"] = recording ? "on" : "off" }
         return LumixResponse(status: .success, fields: fields, summary: "ok")
     }
