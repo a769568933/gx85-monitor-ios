@@ -112,6 +112,18 @@ final class CameraSessionTests: XCTestCase {
         session.disconnect()
     }
 
+    func testUnknownRecordingOnConnectDoesNotForceRecordMode() async {
+        let commands = TestCommands()
+        await commands.setBodyRecording(true)
+        await commands.setRecordingReadout(false)
+        let session = makeSession(commands)
+        session.connect(); await waitUntil { session.canCapture }
+        let modes = await commands.recordModeCount
+        XCTAssertEqual(modes, 0)
+        XCTAssertEqual(session.controlState.recordingState, .unknown)
+        session.disconnect()
+    }
+
     func testBackgroundStopsReceiverAndForegroundResumesOnlyWhenWanted() async {
         let receiver = TestReceiver()
         let session = makeSession(TestCommands(), receiver: receiver)

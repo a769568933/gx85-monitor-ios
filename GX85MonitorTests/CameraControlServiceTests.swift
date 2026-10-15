@@ -4,6 +4,14 @@ import GX85Core
 @testable import GX85Monitor
 
 final class CameraControlServiceTests: XCTestCase {
+    func testUnknownRecordingDoesNotMutateModeWhenRestoringPlayback() async {
+        let camera = ControlCamera(.unknownRecording)
+        do { _ = try await service(camera).leavePlayback(port: 49152); XCTFail("Unknown recording state must not switch camera mode") }
+        catch { }
+        let calls = await camera.calls
+        XCTAssertFalse(calls.contains(.recordMode))
+        XCTAssertFalse(calls.contains(.videoStop))
+    }
     func testTapFocusPreservesMFAndNeverTriggersCapture() async {
         let camera = ControlCamera(.ackOnly)
         do { try await service(camera).focus(at: CGPoint(x: 0.5, y: 0.5)); XCTFail("MF must not request touch autofocus") }

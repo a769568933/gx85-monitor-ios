@@ -52,7 +52,7 @@ final class CameraMediaClientTests: XCTestCase {
         let decision = RedirectDecision()
         decision.url = source
         let callback = expectation(description: "Redirect decision")
-        SameCameraRedirectGuard(host: "192.168.54.1").urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request) { decision.url = $0; callback.fulfill() }
+        SameCameraRedirectGuard(host: "192.168.54.1").urlSession(session, task: task, willPerformHTTPRedirection: response, newRequest: request) { decision.url = $0?.url; callback.fulfill() }
         wait(for: [callback], timeout: 1)
         XCTAssertNil(decision.url)
         task.cancel()
